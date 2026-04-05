@@ -1,129 +1,117 @@
 import os
-import calendar as cal_mod
-from datetime import date, datetime, timedelta
-from io import BytesIO, StringIO
-import base64
 import csv
-import secrets
+import io
+import uuid
+import base64
+from datetime import datetime, date, timedelta
 
-from flask import Flask, render_template, request, redirect, url_for, flash, Response
-from flask_sqlalchemy import SQLAlchemy
-from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 import pytz
 import qrcode
+from flask import (
+    Flask, render_template, request, redirect, url_for,
+    flash, session, Response
+)
+from flask_sqlalchemy import SQLAlchemy
+from werkzeug.security import generate_password_hash, check_password_hash
 
-from config import Config
-from models import db, Member, Reservation, DayType, Admin
-
-# ── App factory ──────────────────────────────────────────────────
+# ---------------------------------------------------------------------------
+# App setup
+# ---------------------------------------------------------------------------
 app = Flask(__name__)
-app.config.from_object(Config)
+app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key')
 
-db.init_app(app)
+database_url = os.environ.get('DATABASE_URL', 'sqlite:///splashpass.db')
+if database_url.startswith('postgres://'):
+    database_url = database_url.replace('postgres://', 'postgresql://', 1)
+app.config['SQLALCHEMY_DATABASE_URI'] = database_url
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-login_manager = LoginManager()
-login_manager.init_app(app)
-login_manager.login_view = 'admin_login'
-
-ET = pytz.timezone('US/Eastern')
-
-CAPACITY = 128
+db = SQLAlchemy(app)
+EASTERN = pytz.timezone('US/Eastern')
+DEFAULT_CAPACITY = 128
 MAX_PARTY = 6
+ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'admin')
 
+# ---------------------------------------------------------------------------
+# Models
+# ---------------------------------------------------------------------------
+class Admin(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(80), unique=True, nullable=False)
+    password_hash = db.Column(db.String(256), nullable=False)
 
-@login_manager.user_loader
-def load_user(user_id):
-    return Admin.query.get(int(user_id))
+class Member(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    owner_number = db.Column(db.String(50), nullable=False)
+    last_name = db.Column(db.String(100), nullable=False)
+    first_name = db.Column(db.String(100), nullable=False)
+    enrollment_type = db.Column(db.String(50))
+    expiration_date = db.Column(db.String(50))
+    membership = db.Column(db.String(20), nullable=False)  # Platinum, Gold, Silver
+    active = db.Column(db.Boolean, default=True)
+    reservations = db.relationship('Reservation', backref='member', lazy=True)
 
+class DayType(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    date = db.Column(db.Date, unique=True, nullable=False)
+    day_type = db.Column(db.String(20), nullable=False)  # Weekday, Weekend, High Use
+    capacity_override = db.Column(db.Integer)
 
-# ── Helpers ──────────────────────────────────────────────────────
-def now_et():
-    return datetime.now(ET)
+class Reservation(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    confirmation_code = db.Column(db.String(20), unique=True, nullable=False)
+    member_id = db.Column(db.Integer, db.ForeignKey('member.id'), nullable=False)
+    reservation_date = db.Column(db.Date, nullable=False)
+    party_size = db.Column(db.Integer, nullable=False)
+    arrived = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(EASTERN))
 
-def today_et():
-    return now_et().date()
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+def today_eastern():
+    return datetime.now(EASTERN).date()
 
 def get_day_type(d):
-    override = DayType.query.filter_by(date=d).first()
-    if override:
-        return override.day_type
-    if d.weekday() >= 5:
-        return 'Weekend'
-    return 'Weekday'
+    dt = DayType.query.filter_by(date=d).first()
+    if dt:
+        return dt.day_type
+    return 'Weekend' if d.weekday() >= 5 else 'Weekday'
 
-def heads_for_date(d):
-    result = db.session.query(db.func.coalesce(db.func.sum(Reservation.party_size), 0))\
-        .filter(Reservation.reservation_date == d).scalar()
-    return result
+def get_capacity(d):
+    dt = DayType.query.filter_by(date=d).first()
+    if dt and dt.capacity_override:
+        return dt.capacity_override
+    return DEFAULT_CAPACITY
 
-def arrived_heads_for_date(d):
-    result = db.session.query(db.func.coalesce(db.func.sum(Reservation.party_size), 0))\
-        .filter(Reservation.reservation_date == d, Reservation.arrived == True).scalar()
-    return result
+def current_heads(d):
+    result = db.session.query(db.func.sum(Reservation.party_size)).filter(
+        Reservation.reservation_date == d
+    ).scalar()
+    return result or 0
 
-def generate_code():
-    return secrets.token_hex(4).upper()
+def generate_confirmation():
+    return 'SP-' + uuid.uuid4().hex[:8].upper()
 
-def make_qr_b64(data):
-    qr = qrcode.QRCode(version=1, box_size=6, border=2)
-    qr.add_data(data)
-    qr.make(fit=True)
-    img = qr.make_image(fill_color='black', back_color='white')
-    buf = BytesIO()
-    img.save(buf, format='PNG')
-    return base64.b64encode(buf.getvalue()).decode()
+def make_qr_base64(data):
+    qr = qrcode.make(data)
+    buf = io.BytesIO()
+    qr.save(buf, format='PNG')
+    return base64.b64encode(buf.getvalue()).decode('utf-8')
 
-def available_dates_for_member(member):
-    t = today_et()
-    n = now_et()
-    tier = member.enrollment_type
+def admin_required(f):
+    from functools import wraps
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not session.get('admin'):
+            flash('Please log in.', 'danger')
+            return redirect(url_for('admin_login'))
+        return f(*args, **kwargs)
+    return decorated
 
-    if tier == 'Platinum':
-        dates = [t + timedelta(days=i) for i in range(7)]
-    else:
-        hour = n.hour
-        if 7 <= hour < 20:
-            dates = [t]
-        else:
-            return []
-
-    allowed = []
-    for d in dates:
-        dt = get_day_type(d)
-        if tier == 'Silver' and dt != 'Weekday':
-            continue
-        if tier == 'Gold' and dt == 'High Use':
-            continue
-        allowed.append(d)
-    return allowed
-
-
-def build_months(year):
-    months = []
-    for m in range(1, 13):
-        first_weekday = cal_mod.monthrange(year, m)[0]
-        first_weekday = (first_weekday + 1) % 7
-        num_days = cal_mod.monthrange(year, m)[1]
-        days = []
-        for d in range(1, num_days + 1):
-            dt = date(year, m, d)
-            days.append({
-                'day': d,
-                'date': dt,
-                'day_type': get_day_type(dt),
-            })
-        months.append({
-            'name': cal_mod.month_name[m],
-            'month': m,
-            'first_weekday': first_weekday,
-            'days': days,
-        })
-    return months
-
-
-# ══════════════════════════════════════════════════════════════════
-#  PUBLIC ROUTES
-# ══════════════════════════════════════════════════════════════════
+# ---------------------------------------------------------------------------
+# Public routes
+# ---------------------------------------------------------------------------
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -131,375 +119,340 @@ def index():
 @app.route('/reserve', methods=['GET', 'POST'])
 def reserve():
     if request.method == 'GET':
-        return render_template('reserve.html', step='identify')
+        return render_template('reserve.html')
 
-    step = request.form.get('step', 'identify')
+    owner_number = request.form.get('owner_number', '').strip()
+    last_name = request.form.get('last_name', '').strip()
+    reservation_date_str = request.form.get('reservation_date', '')
+    party_size = int(request.form.get('party_size', 1))
 
-    if step == 'identify':
-        owner = request.form.get('owner_number', '').strip()
-        member = Member.query.filter_by(owner_number=owner, active=True).first()
-        if not member:
-            flash('Owner number not found or membership is inactive.', 'error')
-            return render_template('reserve.html', step='identify')
+    # --- Validate member ---
+    member = Member.query.filter(
+        db.func.lower(Member.owner_number) == owner_number.lower(),
+        db.func.lower(Member.last_name) == last_name.lower(),
+        Member.active == True
+    ).first()
 
-        if member.expiration_date:
-            try:
-                if isinstance(member.expiration_date, str):
-                    exp = datetime.strptime(member.expiration_date, '%Y-%m-%d').date()
-                else:
-                    exp = member.expiration_date
-                if exp < today_et():
-                    flash('Your membership has expired.', 'error')
-                    return render_template('reserve.html', step='identify')
-            except (ValueError, TypeError):
-                pass
+    if not member:
+        flash('Owner number and last name not found or membership inactive.', 'danger')
+        return redirect(url_for('reserve'))
 
-        dates = available_dates_for_member(member)
-        if not dates:
-            flash('No dates are available for your membership tier right now.', 'warning')
-            return render_template('reserve.html', step='identify')
+    # --- Validate date ---
+    try:
+        res_date = date.fromisoformat(reservation_date_str)
+    except ValueError:
+        flash('Invalid date.', 'danger')
+        return redirect(url_for('reserve'))
 
-        date_info = []
-        for d in dates:
-            h = heads_for_date(d)
-            date_info.append({
-                'date': d,
-                'day_type': get_day_type(d),
-                'remaining': CAPACITY - h,
-                'full': h >= CAPACITY,
-            })
+    now = today_eastern()
+    if res_date < now:
+        flash('Cannot book in the past.', 'danger')
+        return redirect(url_for('reserve'))
 
-        return render_template('reserve.html', step='select',
-                               member=member, date_info=date_info, max_party=MAX_PARTY)
+    # --- Membership rules ---
+    days_ahead = (res_date - now).days
+    day_type = get_day_type(res_date)
+    tier = member.membership
 
-    if step == 'confirm':
-        owner = request.form.get('owner_number', '').strip()
-        member = Member.query.filter_by(owner_number=owner, active=True).first()
-        if not member:
-            flash('Session error. Please start over.', 'error')
+    if tier == 'Platinum':
+        if days_ahead > 6:
+            flash('Platinum members can book up to 6 days in advance.', 'danger')
             return redirect(url_for('reserve'))
-
-        date_str = request.form.get('reservation_date', '')
-        try:
-            res_date = date.fromisoformat(date_str)
-        except (ValueError, TypeError):
-            flash('Invalid date selected.', 'error')
+    elif tier == 'Gold':
+        if days_ahead > 0:
+            flash('Gold members can only book same-day.', 'danger')
             return redirect(url_for('reserve'))
-
-        party_size = int(request.form.get('party_size', 1))
-        party_size = max(1, min(party_size, MAX_PARTY))
-
-        allowed = available_dates_for_member(member)
-        if res_date not in allowed:
-            flash('That date is not available for your tier.', 'error')
+        if day_type == 'High Use':
+            flash('Gold members cannot book High Use days.', 'danger')
             return redirect(url_for('reserve'))
-
-        current_heads = heads_for_date(res_date)
-        if current_heads + party_size > CAPACITY:
-            flash(f'Not enough capacity. Only {CAPACITY - current_heads} spots remain.', 'error')
+    elif tier == 'Silver':
+        if days_ahead > 0:
+            flash('Silver members can only book same-day.', 'danger')
             return redirect(url_for('reserve'))
-
-        existing = Reservation.query.filter_by(
-            member_id=member.id, reservation_date=res_date).first()
-        if existing:
-            flash('You already have a reservation for this date.', 'warning')
+        if day_type in ('Weekend', 'High Use'):
+            flash('Silver members can only book Weekdays.', 'danger')
             return redirect(url_for('reserve'))
+    else:
+        flash('Unknown membership tier.', 'danger')
+        return redirect(url_for('reserve'))
 
-        code = generate_code()
-        while Reservation.query.filter_by(confirmation_code=code).first():
-            code = generate_code()
+    # --- Party size ---
+    if party_size < 1 or party_size > MAX_PARTY:
+        flash(f'Party size must be 1-{MAX_PARTY}.', 'danger')
+        return redirect(url_for('reserve'))
 
-        reservation = Reservation(
-            member_id=member.id,
-            reservation_date=res_date,
-            party_size=party_size,
-            confirmation_code=code,
-        )
-        db.session.add(reservation)
-        db.session.commit()
+    # --- Capacity ---
+    cap = get_capacity(res_date)
+    used = current_heads(res_date)
+    if used + party_size > cap:
+        remaining = cap - used
+        flash(f'Not enough capacity. {remaining} spots remaining.', 'danger')
+        return redirect(url_for('reserve'))
 
-        qr_data = f"SPLASHPASS:{code}"
-        qr_b64 = make_qr_b64(qr_data)
+    # --- Duplicate check ---
+    existing = Reservation.query.filter_by(
+        member_id=member.id,
+        reservation_date=res_date
+    ).first()
+    if existing:
+        flash('You already have a reservation for this date.', 'warning')
+        return redirect(url_for('reserve'))
 
-        return render_template('confirmation.html',
-                               reservation=reservation, member=member, qr_b64=qr_b64)
+    # --- Create reservation ---
+    code = generate_confirmation()
+    reservation = Reservation(
+        confirmation_code=code,
+        member_id=member.id,
+        reservation_date=res_date,
+        party_size=party_size
+    )
+    db.session.add(reservation)
+    db.session.commit()
 
-    return redirect(url_for('reserve'))
+    qr_code = make_qr_base64(code)
+    return render_template('confirmation.html', reservation=reservation, qr_code=qr_code)
 
-
-# ══════════════════════════════════════════════════════════════════
-#  ADMIN ROUTES
-# ══════════════════════════════════════════════════════════════════
+# ---------------------------------------------------------------------------
+# Admin auth
+# ---------------------------------------------------------------------------
 @app.route('/admin/login', methods=['GET', 'POST'])
 def admin_login():
-    if current_user.is_authenticated:
+    if request.method == 'GET':
+        return render_template('admin/login.html')
+
+    password = request.form.get('password', '')
+    if password == ADMIN_PASSWORD:
+        session['admin'] = True
+        flash('Logged in.', 'success')
         return redirect(url_for('admin_dashboard'))
-    if request.method == 'POST':
-        username = request.form.get('username', '')
-        password = request.form.get('password', '')
-        user = Admin.query.filter_by(username=username).first()
-        if user and user.password_hash == password:
-            login_user(user)
-            return redirect(url_for('admin_dashboard'))
-        flash('Invalid credentials.', 'error')
-    return render_template('admin/login.html')
+
+    flash('Invalid password.', 'danger')
+    return redirect(url_for('admin_login'))
 
 @app.route('/admin/logout')
-@login_required
 def admin_logout():
-    logout_user()
-    flash('Logged out.', 'info')
+    session.pop('admin', None)
+    flash('Logged out.', 'success')
     return redirect(url_for('index'))
 
+# ---------------------------------------------------------------------------
+# Admin dashboard
+# ---------------------------------------------------------------------------
 @app.route('/admin')
-@login_required
+@admin_required
 def admin_dashboard():
-    t = today_et()
-    reservations = Reservation.query.filter_by(reservation_date=t)\
-        .join(Member).order_by(Member.last_name).all()
-    total = heads_for_date(t)
-    arrived = arrived_heads_for_date(t)
-    day_type = get_day_type(t)
-
-    upcoming = []
-    for i in range(7):
-        d = t + timedelta(days=i)
-        upcoming.append({
-            'date': d,
-            'day_type': get_day_type(d),
-            'heads': heads_for_date(d),
-            'capacity': CAPACITY,
-        })
-
+    now = today_eastern()
+    today_reservations = Reservation.query.filter_by(
+        reservation_date=now
+    ).order_by(Reservation.created_at).all()
+    today_heads = current_heads(now)
+    today_capacity = get_capacity(now)
+    today_str = now.strftime('%A, %B %d, %Y')
     return render_template('admin/dashboard.html',
-                           reservations=reservations,
-                           total_heads=total,
-                           arrived_heads=arrived,
-                           today=t,
-                           today_type=day_type,
-                           capacity=CAPACITY,
-                           upcoming=upcoming)
+                           today_reservations=today_reservations,
+                           today_heads=today_heads,
+                           today_capacity=today_capacity,
+                           today_str=today_str)
 
-@app.route('/admin/reservations/<date_str>')
-@login_required
-def admin_reservations(date_str):
-    try:
-        target = date.fromisoformat(date_str)
-    except ValueError:
-        flash('Invalid date.', 'error')
-        return redirect(url_for('admin_dashboard'))
-
-    reservations = Reservation.query.filter_by(reservation_date=target)\
-        .join(Member).order_by(Member.last_name).all()
-
-    return render_template('admin/reservations.html',
-                           reservations=reservations,
-                           target_date=target,
-                           day_type=get_day_type(target),
-                           total_heads=heads_for_date(target),
-                           arrived_heads=arrived_heads_for_date(target),
-                           capacity=CAPACITY)
-
-@app.route('/admin/toggle_arrived/<int:res_id>', methods=['POST'])
-@login_required
+# ---------------------------------------------------------------------------
+# Toggle arrived
+# ---------------------------------------------------------------------------
+@app.route('/admin/arrived/<int:res_id>', methods=['POST'])
+@admin_required
 def toggle_arrived(res_id):
     r = Reservation.query.get_or_404(res_id)
     r.arrived = not r.arrived
     db.session.commit()
-    ref = request.referrer or url_for('admin_dashboard')
-    return redirect(ref)
+    return redirect(url_for('admin_dashboard'))
 
-@app.route('/admin/export/<date_str>')
-@login_required
-def export_reservations(date_str):
-    try:
-        target = date.fromisoformat(date_str)
-    except ValueError:
-        flash('Invalid date.', 'error')
-        return redirect(url_for('admin_dashboard'))
+# ---------------------------------------------------------------------------
+# All reservations
+# ---------------------------------------------------------------------------
+@app.route('/admin/reservations')
+@admin_required
+def admin_reservations():
+    filter_date = request.args.get('date', '')
+    if filter_date:
+        try:
+            fd = date.fromisoformat(filter_date)
+            reservations = Reservation.query.filter_by(
+                reservation_date=fd
+            ).order_by(Reservation.reservation_date).all()
+        except ValueError:
+            reservations = Reservation.query.order_by(
+                Reservation.reservation_date.desc()
+            ).all()
+            filter_date = ''
+    else:
+        reservations = Reservation.query.order_by(
+            Reservation.reservation_date.desc()
+        ).all()
+    return render_template('admin/reservations.html',
+                           reservations=reservations,
+                           filter_date=filter_date)
 
-    reservations = Reservation.query.filter_by(reservation_date=target)\
-        .join(Member).order_by(Member.last_name).all()
+# ---------------------------------------------------------------------------
+# Cancel reservation
+# ---------------------------------------------------------------------------
+@app.route('/admin/cancel/<int:res_id>', methods=['POST'])
+@admin_required
+def cancel_reservation(res_id):
+    r = Reservation.query.get_or_404(res_id)
+    db.session.delete(r)
+    db.session.commit()
+    flash('Reservation cancelled.', 'success')
+    return redirect(url_for('admin_reservations'))
 
-    output = StringIO()
+# ---------------------------------------------------------------------------
+# Export CSV
+# ---------------------------------------------------------------------------
+@app.route('/admin/export')
+@admin_required
+def export_reservations():
+    reservations = Reservation.query.order_by(
+        Reservation.reservation_date.desc()
+    ).all()
+    output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(['Confirmation', 'LastName', 'FirstName', 'OwnerNumber',
-                     'Tier', 'PartySize', 'Arrived'])
+    writer.writerow(['Confirmation', 'OwnerNumber', 'LastName', 'FirstName',
+                     'Membership', 'Date', 'PartySize', 'Arrived'])
     for r in reservations:
-        writer.writerow([r.confirmation_code, r.member.last_name, r.member.first_name,
-                         r.member.owner_number, r.member.enrollment_type,
-                         r.party_size, 'Yes' if r.arrived else 'No'])
-
+        writer.writerow([
+            r.confirmation_code,
+            r.member.owner_number,
+            r.member.last_name,
+            r.member.first_name,
+            r.member.membership,
+            r.reservation_date.isoformat(),
+            r.party_size,
+            'Yes' if r.arrived else 'No'
+        ])
     return Response(
         output.getvalue(),
         mimetype='text/csv',
-        headers={'Content-Disposition': f'attachment; filename=reservations_{date_str}.csv'}
+        headers={'Content-Disposition': 'attachment; filename=reservations.csv'}
     )
 
+# ---------------------------------------------------------------------------
+# Calendar / Day types
+# ---------------------------------------------------------------------------
+@app.route('/admin/calendar', methods=['GET', 'POST'])
+@admin_required
+def admin_calendar():
+    if request.method == 'POST':
+        date_str = request.form.get('date', '')
+        day_type_val = request.form.get('day_type', 'Weekday')
+        cap_str = request.form.get('capacity_override', '')
 
-# ── Member management ────────────────────────────────────────────
+        try:
+            d = date.fromisoformat(date_str)
+        except ValueError:
+            flash('Invalid date.', 'danger')
+            return redirect(url_for('admin_calendar'))
+
+        cap = int(cap_str) if cap_str else None
+
+        existing = DayType.query.filter_by(date=d).first()
+        if existing:
+            existing.day_type = day_type_val
+            existing.capacity_override = cap
+        else:
+            dt = DayType(date=d, day_type=day_type_val, capacity_override=cap)
+            db.session.add(dt)
+        db.session.commit()
+        flash(f'Day type set for {d.isoformat()}.', 'success')
+        return redirect(url_for('admin_calendar'))
+
+    day_types = DayType.query.order_by(DayType.date).all()
+    return render_template('admin/calendar.html', day_types=day_types)
+
+@app.route('/admin/daytype/delete/<int:dt_id>', methods=['POST'])
+@admin_required
+def delete_day_type(dt_id):
+    dt = DayType.query.get_or_404(dt_id)
+    db.session.delete(dt)
+    db.session.commit()
+    flash('Day type removed.', 'success')
+    return redirect(url_for('admin_calendar'))
+
+# ---------------------------------------------------------------------------
+# Members management
+# ---------------------------------------------------------------------------
 @app.route('/admin/members')
-@login_required
+@admin_required
 def admin_members():
-    search = request.args.get('search', '').strip()
-    tier_filter = request.args.get('tier', '').strip()
+    members = Member.query.order_by(Member.last_name).all()
+    return render_template('admin/members.html', members=members)
 
-    query = Member.query.filter_by(active=True)
-    if search:
-        like = f'%{search}%'
-        query = query.filter(
-            db.or_(
-                Member.owner_number.ilike(like),
-                Member.last_name.ilike(like),
-                Member.first_name.ilike(like),
-            )
-        )
-    if tier_filter:
-        query = query.filter_by(enrollment_type=tier_filter)
-
-    members = query.order_by(Member.last_name, Member.first_name).limit(200).all()
-    total_count = Member.query.filter_by(active=True).count()
-
-    return render_template('admin/members.html',
-                           members=members, search=search,
-                           tier_filter=tier_filter, total_count=total_count)
-
-@app.route('/admin/upload_members', methods=['POST'])
-@login_required
+@app.route('/admin/upload', methods=['POST'])
+@admin_required
 def upload_members():
-    file = request.files.get('csv_file')
+    file = request.files.get('file')
     if not file:
-        flash('No file uploaded.', 'error')
+        flash('No file selected.', 'danger')
         return redirect(url_for('admin_members'))
 
     try:
-        content = file.read().decode('utf-8-sig')
-    except UnicodeDecodeError:
-        content = file.read().decode('latin-1')
-
-    if '\t' in content[:500]:
-        delimiter = '\t'
-    else:
-        delimiter = ','
-
-    reader = csv.DictReader(StringIO(content), delimiter=delimiter)
-
-    if reader.fieldnames:
-        reader.fieldnames = [h.strip() for h in reader.fieldnames]
-
-    seen_owners = set()
-    added = 0
-    updated = 0
-
-    for row in reader:
-        owner = row.get('OwnerNumber', '').strip()
-        if not owner:
-            continue
-        seen_owners.add(owner)
-
-        last_name = row.get('LastName', '').strip()
-        first_name = row.get('FirstName', '').strip()
-        enrollment = row.get('EnrollmentType', '').strip()
-        membership = row.get('Membership', '').strip()
-        exp_str = row.get('ExpirationDate', '').strip()
-
-        existing = Member.query.filter_by(owner_number=owner).first()
-        if existing:
-            existing.last_name = last_name
-            existing.first_name = first_name
-            existing.enrollment_type = enrollment
-            existing.membership = membership
-            existing.expiration_date = exp_str if exp_str else None
-            existing.active = True
-            updated += 1
+        content = file.read().decode('utf-8')
+        # Detect delimiter
+        if '\t' in content.split('\n')[0]:
+            delimiter = '\t'
         else:
-            m = Member(
-                owner_number=owner,
-                last_name=last_name,
-                first_name=first_name,
-                enrollment_type=enrollment,
-                membership=membership,
-                expiration_date=exp_str if exp_str else None,
-                active=True,
-            )
-            db.session.add(m)
-            added += 1
+            delimiter = ','
 
-    if seen_owners:
-        Member.query.filter(~Member.owner_number.in_(seen_owners))\
-            .update({Member.active: False}, synchronize_session='fetch')
+        reader = csv.DictReader(io.StringIO(content), delimiter=delimiter)
 
-    db.session.commit()
-    flash(f'Import complete: {added} added, {updated} updated, '
-          f'{Member.query.filter_by(active=False).count()} deactivated.', 'success')
+        # Normalize field names
+        count = 0
+        for row in reader:
+            # Handle various column name formats
+            clean = {}
+            for key, val in row.items():
+                clean[key.strip().lower().replace(' ', '_')] = val.strip() if val else ''
+
+            owner_number = clean.get('ownernumber', clean.get('owner_number', ''))
+            last_name = clean.get('lastname', clean.get('last_name', ''))
+            first_name = clean.get('firstname', clean.get('first_name', ''))
+            enrollment_type = clean.get('enrollmenttype', clean.get('enrollment_type', ''))
+            expiration_date = clean.get('expirationdate', clean.get('expiration_date', ''))
+            membership = clean.get('membership', '')
+
+            if not owner_number or not membership:
+                continue
+
+            existing = Member.query.filter_by(owner_number=owner_number).first()
+            if existing:
+                existing.last_name = last_name
+                existing.first_name = first_name
+                existing.enrollment_type = enrollment_type
+                existing.expiration_date = expiration_date
+                existing.membership = membership
+                existing.active = True
+            else:
+                m = Member(
+                    owner_number=owner_number,
+                    last_name=last_name,
+                    first_name=first_name,
+                    enrollment_type=enrollment_type,
+                    expiration_date=expiration_date,
+                    membership=membership,
+                    active=True
+                )
+                db.session.add(m)
+            count += 1
+
+        db.session.commit()
+        flash(f'Loaded {count} members.', 'success')
+    except Exception as e:
+        flash(f'Error processing file: {str(e)}', 'danger')
+
     return redirect(url_for('admin_members'))
 
-
-# ── Calendar management ──────────────────────────────────────────
-@app.route('/admin/calendar')
-@app.route('/admin/calendar/<int:year>')
-@login_required
-def admin_calendar_editor(year=None):
-    if year is None:
-        year = today_et().year
-    months = build_months(year)
-    return render_template('admin/calendar_editor.html', year=year, months=months)
-
-@app.route('/admin/calendar/set_day', methods=['POST'])
-@login_required
-def admin_calendar_set_day():
-    date_str = request.form.get('date', '')
-    day_type = request.form.get('day_type', '')
-
-    try:
-        d = date.fromisoformat(date_str)
-    except (ValueError, TypeError):
-        return ('Bad date', 400)
-
-    if day_type not in ('Weekday', 'Weekend', 'High Use'):
-        return ('Bad type', 400)
-
-    default = 'Weekend' if d.weekday() >= 5 else 'Weekday'
-
-    override = DayType.query.filter_by(date=d).first()
-    if day_type == default:
-        if override:
-            db.session.delete(override)
-    else:
-        if override:
-            override.day_type = day_type
-        else:
-            override = DayType(date=d, day_type=day_type)
-            db.session.add(override)
-
-    db.session.commit()
-    return ('OK', 200)
-
-@app.route('/admin/calendar/print/<int:year>')
-@login_required
-def admin_calendar_print(year):
-    months = build_months(year)
-    qr_b64 = make_qr_b64('https://ccbrsplashpass.com')
-    return render_template('admin/calendar_print.html', year=year, months=months, qr_b64=qr_b64)
-
-
-# ══════════════════════════════════════════════════════════════════
-#  INIT
-# ══════════════════════════════════════════════════════════════════
-def init_db():
-    db.create_all()
-    if not Admin.query.first():
-        admin = Admin(
-            username='admin',
-            password_hash=os.environ.get('ADMIN_PASSWORD', 'changeme')
-        )
-        db.session.add(admin)
-        db.session.commit()
-        print('Default admin user created (username: admin)')
-
+# ---------------------------------------------------------------------------
+# Init DB
+# ---------------------------------------------------------------------------
 with app.app_context():
-    init_db()
-
+    db.create_all()
 
 if __name__ == '__main__':
     app.run(debug=True)
