@@ -152,7 +152,8 @@ def reserve():
        # --- Membership rules ---
     days_ahead = (res_date - now).days
     day_type = get_day_type(res_date)
-    tier = member.membership.strip().lower()
+        tier = member.membership.strip().lower()
+    flash(f'DEBUG: tier = [{tier}] membership = [{member.membership}]', 'info')
 
     if tier == 'platinum':
         if days_ahead > 6:
