@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Day Type Calendar{% endblock %}
+{% block content %}
+<h1>Day Type Calendar</h1>
+<div class="admin-nav">
+    <a href="{{ url_for('admin_dashboard') }}" class="btn">← Dashboard</a>
+</div>
+
+<h2>Set Day Type</h2>
+<form method="POST" action="{{ url_for('admin_calendar') }}">
+    <div class="form-row">
+        <div class="form-group">
+            <label for="date">Date</label>
+            <input type="date" id="date" name="date" required>
+        </div>
+        <div class="form-group">
+            <label for="day_type">Day Type</label>
+            <select id="day_type" name="day_type" required>
+                <option value="Weekday">Weekday</option>
+                <option value="Weekend">Weekend</option>
+                <option value="High Use">High Use</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="capacity_override">Capacity Override (blank = 128)</label>
+            <input type="number" id="capacity_override" name="capacity_override"
+                   placeholder="128" min="0" max="500">
+        </div>
+    </div>
+    <button type="submit" class="btn btn-primary">Save</button>
+</form>
+
+<h2>Custom Day Types</h2>
+{% if day_types %}
+<table>
+    <thead>
+        <tr>
+            <th>Date</th>
+            <th>Day Type</th>
+            <th>Capacity</th>
+            <th>Action</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for d in day_types %}
+        <tr>
+            <td>{{ d.date.strftime('%A, %B %d, %Y') }}</td>
+            <td>{{ d.day_type }}</td>
+            <td>{{ d.capacity_override or 128 }}</td>
+            <td>
+                <form method="POST" action="{{ url_for('delete_day_type', dt_id=d.id) }}" style="display:inline;">
+                    <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p>No custom day types set. Days default to Weekday/Weekend based on calendar.</p>
+{% endif %}
+{% endblock %}
