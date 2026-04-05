@@ -145,15 +145,16 @@ def reserve():
         return redirect(url_for('reserve'))
 
     now = today_eastern()
-    if res_date < now:
+        if res_date < now:
         flash('Cannot book in the past.', 'danger')
         return redirect(url_for('reserve'))
 
-       # --- Membership rules ---
+    # --- Membership rules ---
     days_ahead = (res_date - now).days
     day_type = get_day_type(res_date)
-        tier = member.membership.strip().lower()
+    tier = member.membership.strip().lower()
     flash(f'DEBUG: tier = [{tier}] membership = [{member.membership}]', 'info')
+
 
     if tier == 'platinum':
         if days_ahead > 6:
