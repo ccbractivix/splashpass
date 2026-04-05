@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Book - SplashPass{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card p-4">
+            <h2 class="text-center mb-3">Book Your Visit</h2>
+            <div class="text-center mb-3">
+                <span class="badge badge-{{ tier|lower }} fs-6">{{ tier }} Member</span>
+            </div>
+            <p class="text-center">
+                Welcome, <strong>{{ first_name }} {{ last_name }}</strong>
+                (Owner #{{ owner_number }})
+            </p>
+
+            {% if dates %}
+                <form method="POST" action="{{ url_for('reserve') }}">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Select Date</label>
+                        <select name="date" class="form-select" required>
+                            {% for d in dates %}
+                                <option value="{{ d.date }}">
+                                    {{ d.date.strftime('%A, %B %d, %Y') }}
+                                    ({{ d.day_type }} — {{ d.available }} spots left)
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Party Size (including you)</label>
+                        <select name="party_size" class="form-select" required>
+                            {% for i in range(1, max_party + 1) %}
+                                <option value="{{ i }}">{{ i }}</option>
+                            {% endfor %}
+                        </select>
+                        <div class="form-text">Max {{ max_party }} (1 member + {{ max_party - 1 }} guests)</div>
+                    </div>
+                    <button type="submit" class="btn btn-splash w-100 btn-lg">Reserve</button>
+                </form>
+            {% else %}
+                <div class="alert alert-warning text-center">
+                    <strong>No available dates</strong> for your membership tier right now.
+                    <br>
+                    {% if tier == 'Gold' %}
+                        Gold members can book same-day on Weekdays and Weekends (not High Use days).
+                    {% elif tier == 'Silver' %}
+                        Silver members can book same-day on Weekdays only.
+                    {% else %}
+                        Please check back later.
+                    {% endif %}
+                </div>
+            {% endif %}
+
+            <div class="text-center mt-3">
+                <a href="{{ url_for('logout') }}">← Back to login</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
