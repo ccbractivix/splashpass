@@ -153,7 +153,6 @@ def reserve():
     days_ahead = (res_date - now).days
     day_type = get_day_type(res_date)
     tier = member.membership.strip().lower()
-    flash(f'DEBUG: tier=[{tier}] raw=[{member.membership}]', 'info')
 
     if tier == 'platinum':
         if days_ahead > 6:
@@ -415,7 +414,7 @@ def upload_members():
             expiration_date = clean.get('expirationdate', clean.get('expiration_date', ''))
             membership = clean.get('membership', '')
 
-            if not owner_number or not membership:
+            if not owner_number or not enrollment_type:
                 continue
 
             existing = Member.query.filter_by(owner_number=owner_number).first()
@@ -424,7 +423,7 @@ def upload_members():
                 existing.first_name = first_name
                 existing.enrollment_type = enrollment_type
                 existing.expiration_date = expiration_date
-                existing.membership = membership
+                existing.membership = enrollment_type
                 existing.active = True
             else:
                 m = Member(
@@ -433,7 +432,7 @@ def upload_members():
                     first_name=first_name,
                     enrollment_type=enrollment_type,
                     expiration_date=expiration_date,
-                    membership=membership,
+                    membership=enrollment_type,
                     active=True
                 )
                 db.session.add(m)
