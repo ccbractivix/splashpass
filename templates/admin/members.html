@@ -1,72 +1,47 @@
 {% extends "base.html" %}
-
-{% block title %}Members{% endblock %}
-
+{% block title %}Manage Members{% endblock %}
 {% block content %}
-<h1>Member Management</h1>
-<p>Total active members: <strong>{{ total_count }}</strong></p>
-
-<div class="form-card">
-    <h3>Upload Member List</h3>
-    <p>Upload a CSV or tab-delimited file with columns: OwnerNumber, LastName, FirstName, ExpirationDate, EnrollmentType, Membership</p>
-    <form method="POST" action="{{ url_for('admin.upload_members') }}" enctype="multipart/form-data">
-        <div class="form-group" style="display:flex; gap:1rem; align-items:end;">
-            <input type="file" name="csv_file" accept=".csv,.txt,.tsv" required class="form-input">
-            <button type="submit" class="btn btn-primary">Upload</button>
-        </div>
-    </form>
+<h1>Manage Members</h1>
+<div class="admin-nav">
+    <a href="{{ url_for('admin_dashboard') }}" class="btn">← Dashboard</a>
 </div>
 
-<div class="form-card">
-    <h3>Search Members</h3>
-    <form method="GET" style="display:flex; gap:1rem; flex-wrap:wrap; align-items:end;">
-        <div class="form-group" style="flex:1; min-width:200px;">
-            <label for="search">Name or Owner #</label>
-            <input type="text" id="search" name="search" value="{{ search }}" class="form-input" placeholder="Search...">
-        </div>
-        <div class="form-group">
-            <label for="tier">Tier</label>
-            <select id="tier" name="tier" class="form-input">
-                <option value="">All</option>
-                <option value="Platinum" {% if tier_filter=='Platinum' %}selected{% endif %}>Platinum</option>
-                <option value="Gold" {% if tier_filter=='Gold' %}selected{% endif %}>Gold</option>
-                <option value="Silver" {% if tier_filter=='Silver' %}selected{% endif %}>Silver</option>
-            </select>
-        </div>
-        <button type="submit" class="btn btn-primary">Search</button>
-    </form>
-</div>
+<h2>Upload Member List</h2>
+<p>Upload a CSV or tab-delimited file with columns: OwnerNumber, LastName, FirstName, EnrollmentType, ExpirationDate, Membership</p>
+<form method="POST" action="{{ url_for('upload_members') }}" enctype="multipart/form-data">
+    <div class="form-group">
+        <input type="file" name="file" accept=".csv,.txt,.tsv" required>
+    </div>
+    <button type="submit" class="btn btn-primary">Upload</button>
+</form>
 
+<h2>Current Members ({{ members|length }})</h2>
 {% if members %}
-<div class="table-wrapper">
-    <table class="data-table">
-        <thead>
-            <tr>
-                <th>Owner #</th>
-                <th>Last Name</th>
-                <th>First Name</th>
-                <th>Tier</th>
-                <th>Membership</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for m in members %}
-            <tr>
-                <td>{{ m.owner_number }}</td>
-                <td>{{ m.last_name }}</td>
-                <td>{{ m.first_name }}</td>
-                <td><span class="tier-badge tier-{{ m.enrollment_type|lower }}">{{ m.enrollment_type }}</span></td>
-                <td>{{ m.membership or '—' }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-</div>
+<table>
+    <thead>
+        <tr>
+            <th>Owner #</th>
+            <th>Name</th>
+            <th>Membership</th>
+            <th>Enrollment</th>
+            <th>Expires</th>
+            <th>Active</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for m in members %}
+        <tr>
+            <td>{{ m.owner_number }}</td>
+            <td>{{ m.first_name }} {{ m.last_name }}</td>
+            <td>{{ m.membership }}</td>
+            <td>{{ m.enrollment_type }}</td>
+            <td>{{ m.expiration_date or 'N/A' }}</td>
+            <td>{{ '✅' if m.active else '❌' }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
 {% else %}
-<p class="empty-message">No members found.</p>
+<p>No members loaded. Upload a CSV above.</p>
 {% endif %}
-
-<div class="admin-actions">
-    <a href="{{ url_for('admin.dashboard') }}" class="btn btn-secondary">← Back to Dashboard</a>
-</div>
 {% endblock %}
