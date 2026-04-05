@@ -1,69 +1,50 @@
 {% extends "base.html" %}
-
-{% block title %}Reserve{% endblock %}
-
+{% block title %}Make a Reservation{% endblock %}
 {% block content %}
 <h1>Make a Reservation</h1>
+<form method="POST" action="{{ url_for('reserve') }}" id="reserveForm">
+    <div class="form-group">
+        <label for="owner_number">Owner Number</label>
+        <input type="text" id="owner_number" name="owner_number" required
+               placeholder="Enter your owner number">
+    </div>
+    <div class="form-group">
+        <label for="last_name">Last Name</label>
+        <input type="text" id="last_name" name="last_name" required
+               placeholder="Enter your last name">
+    </div>
+    <div class="form-group">
+        <label for="reservation_date">Reservation Date</label>
+        <input type="date" id="reservation_date" name="reservation_date" required>
+    </div>
+    <div class="form-group">
+        <label for="party_size">Party Size (including yourself, max 6)</label>
+        <select id="party_size" name="party_size" required>
+            <option value="1">1</option>
+            <option value="2">2</option>
+            <option value="3">3</option>
+            <option value="4">4</option>
+            <option value="5">5</option>
+            <option value="6">6</option>
+        </select>
+    </div>
+    <button type="submit" class="btn btn-primary">Reserve</button>
+</form>
 
-{% if step == 'identify' %}
-<div class="form-card">
-    <h2>Step 1: Enter Your Owner Number</h2>
-    <form method="POST">
-        <input type="hidden" name="step" value="identify">
-        <div class="form-group">
-            <label for="owner_number">Owner Number</label>
-            <input type="text" id="owner_number" name="owner_number" required
-                   placeholder="Enter your owner number" autofocus
-                   class="form-input">
-        </div>
-        <button type="submit" class="btn btn-primary">Look Up My Account</button>
-    </form>
-</div>
-
-{% elif step == 'select' %}
-<div class="form-card">
-    <h2>Welcome, {{ member.first_name }} {{ member.last_name }}!</h2>
-    <p class="tier-badge tier-{{ member.enrollment_type|lower }}">{{ member.enrollment_type }} Member</p>
-
-    <form method="POST">
-        <input type="hidden" name="step" value="confirm">
-        <input type="hidden" name="owner_number" value="{{ member.owner_number }}">
-
-        <div class="form-group">
-            <label>Select a Date</label>
-            <div class="date-options">
-                {% for info in date_info %}
-                <label class="date-option {% if info.full %}date-full{% endif %}">
-                    <input type="radio" name="reservation_date" value="{{ info.date }}"
-                           {% if info.full %}disabled{% endif %}
-                           {% if loop.first and not info.full %}checked{% endif %}>
-                    <div class="date-card">
-                        <span class="date-day">{{ info.date.strftime('%A') }}</span>
-                        <span class="date-num">{{ info.date.strftime('%b %d') }}</span>
-                        <span class="date-type type-{{ info.day_type|lower|replace(' ', '-') }}">{{ info.day_type }}</span>
-                        {% if info.full %}
-                            <span class="date-spots spots-full">FULL</span>
-                        {% else %}
-                            <span class="date-spots">{{ info.remaining }} spots left</span>
-                        {% endif %}
-                    </div>
-                </label>
-                {% endfor %}
-            </div>
-        </div>
-
-        <div class="form-group">
-            <label for="party_size">Party Size (including yourself)</label>
-            <select id="party_size" name="party_size" class="form-input">
-                {% for i in range(1, max_party + 1) %}
-                <option value="{{ i }}">{{ i }}{% if i == 1 %} (just me){% else %} people{% endif %}</option>
-                {% endfor %}
-            </select>
-        </div>
-
-        <button type="submit" class="btn btn-primary">Confirm Reservation</button>
-        <a href="{{ url_for('public.reserve') }}" class="btn btn-secondary">Start Over</a>
-    </form>
-</div>
-{% endif %}
+<script>
+    // Set min date to today
+    const today = new Date();
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const dd = String(today.getDate()).padStart(2, '0');
+    const minDate = `${yyyy}-${mm}-${dd}`;
+    document.getElementById('reservation_date').setAttribute('min', minDate);
+    // Set max date to 6 days from now
+    const maxD = new Date();
+    maxD.setDate(maxD.getDate() + 6);
+    const maxYyyy = maxD.getFullYear();
+    const maxMm = String(maxD.getMonth() + 1).padStart(2, '0');
+    const maxDd = String(maxD.getDate()).padStart(2, '0');
+    document.getElementById('reservation_date').setAttribute('max', `${maxYyyy}-${maxMm}-${maxDd}`);
+</script>
 {% endblock %}
