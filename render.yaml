@@ -5,9 +5,9 @@ services:
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn app:app
     envVars:
-      - key: SECRET_KEY
+      - key: 3746722
         generateValue: true
-      - key: ADMIN_PASSWORD
+      - key: CapeCaribe
         sync: false
       - key: DATABASE_URL
         fromDatabase:
