@@ -152,20 +152,20 @@ def reserve():
     # --- Membership rules ---
     days_ahead = (res_date - now).days
     day_type = get_day_type(res_date)
-    tier = member.membership
+        tier = member.membership.strip().lower()
 
-    if tier == 'Platinum':
+    if tier == 'platinum':
         if days_ahead > 6:
             flash('Platinum members can book up to 6 days in advance.', 'danger')
             return redirect(url_for('reserve'))
-    elif tier == 'Gold':
+    elif tier == 'gold':
         if days_ahead > 0:
             flash('Gold members can only book same-day.', 'danger')
             return redirect(url_for('reserve'))
         if day_type == 'High Use':
             flash('Gold members cannot book High Use days.', 'danger')
             return redirect(url_for('reserve'))
-    elif tier == 'Silver':
+    elif tier == 'silver':
         if days_ahead > 0:
             flash('Silver members can only book same-day.', 'danger')
             return redirect(url_for('reserve'))
