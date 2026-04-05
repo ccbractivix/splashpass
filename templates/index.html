@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}SplashPass - Pool Reservations{% endblock %}
+{% block content %}
+<div class="hero">
+    <h1>🏊 CCB SplashPass</h1>
+    <p>Reserve your pool time online</p>
+    <a href="{{ url_for('reserve') }}" class="btn btn-primary btn-lg">Make a Reservation</a>
+</div>
+<div class="info-cards">
+    <div class="card">
+        <h3>🥇 Platinum</h3>
+        <p>Book up to <strong>6 days</strong> in advance</p>
+        <p>All day types including High Use</p>
+    </div>
+    <div class="card">
+        <h3>🥈 Gold</h3>
+        <p><strong>Same-day</strong> booking only</p>
+        <p>Weekdays &amp; Weekends</p>
+    </div>
+    <div class="card">
+        <h3>🥉 Silver</h3>
+        <p><strong>Same-day</strong> booking only</p>
+        <p>Weekdays only</p>
+    </div>
+</div>
+{% endblock %}
