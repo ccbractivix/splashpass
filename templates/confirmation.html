@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+
+{% block title %}Confirmed!{% endblock %}
+
+{% block content %}
+<div class="confirmation-page">
+    <div class="confirmation-card">
+        <div class="confirm-header">
+            <h1>✅ Reservation Confirmed!</h1>
+        </div>
+
+        <div class="confirm-details">
+            <div class="confirm-code">
+                <span class="code-label">Confirmation Code</span>
+                <span class="code-value">{{ reservation.confirmation_code }}</span>
+            </div>
+
+            <div class="qr-code">
+                <img src="data:image/png;base64,{{ qr_b64 }}" alt="QR Code">
+            </div>
+
+            <table class="detail-table">
+                <tr>
+                    <td class="label">Name</td>
+                    <td>{{ member.first_name }} {{ member.last_name }}</td>
+                </tr>
+                <tr>
+                    <td class="label">Owner #</td>
+                    <td>{{ member.owner_number }}</td>
+                </tr>
+                <tr>
+                    <td class="label">Tier</td>
+                    <td>{{ member.enrollment_type }}</td>
+                </tr>
+                <tr>
+                    <td class="label">Date</td>
+                    <td>{{ reservation.reservation_date.strftime('%A, %B %d, %Y') }}</td>
+                </tr>
+                <tr>
+                    <td class="label">Party Size</td>
+                    <td>{{ reservation.party_size }}</td>
+                </tr>
+            </table>
+        </div>
+
+        <div class="confirm-actions">
+            <button onclick="window.print()" class="btn btn-primary">🖨️ Print Confirmation</button>
+            <a href="{{ url_for('public.reserve') }}" class="btn btn-secondary">Make Another Reservation</a>
+        </div>
+
+        <p class="confirm-note">Please show this confirmation code or QR code at the front desk when you arrive.</p>
+    </div>
+</div>
+{% endblock %}
