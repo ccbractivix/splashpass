@@ -13,7 +13,7 @@ import pytz
 import qrcode
 
 from config import Config
-from models import db, Member, Reservation, DayOverride, AdminUser
+from models import db, Member, Reservation, DayType, Admin
 
 # ── App factory ──────────────────────────────────────────────────
 app = Flask(__name__)
