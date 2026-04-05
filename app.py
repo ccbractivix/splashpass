@@ -47,14 +47,14 @@ class Member(db.Model):
     first_name = db.Column(db.String(100), nullable=False)
     enrollment_type = db.Column(db.String(50))
     expiration_date = db.Column(db.String(50))
-    membership = db.Column(db.String(20), nullable=False)  # Platinum, Gold, Silver
+    membership = db.Column(db.String(20), nullable=False)
     active = db.Column(db.Boolean, default=True)
     reservations = db.relationship('Reservation', backref='member', lazy=True)
 
 class DayType(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     date = db.Column(db.Date, unique=True, nullable=False)
-    day_type = db.Column(db.String(20), nullable=False)  # Weekday, Weekend, High Use
+    day_type = db.Column(db.String(20), nullable=False)
     capacity_override = db.Column(db.Integer)
 
 class Reservation(db.Model):
@@ -145,7 +145,7 @@ def reserve():
         return redirect(url_for('reserve'))
 
     now = today_eastern()
-        if res_date < now:
+    if res_date < now:
         flash('Cannot book in the past.', 'danger')
         return redirect(url_for('reserve'))
 
@@ -153,8 +153,7 @@ def reserve():
     days_ahead = (res_date - now).days
     day_type = get_day_type(res_date)
     tier = member.membership.strip().lower()
-    flash(f'DEBUG: tier = [{tier}] membership = [{member.membership}]', 'info')
-
+    flash(f'DEBUG: tier=[{tier}] raw=[{member.membership}]', 'info')
 
     if tier == 'platinum':
         if days_ahead > 6:
@@ -177,7 +176,6 @@ def reserve():
     else:
         flash('Unknown membership tier.', 'danger')
         return redirect(url_for('reserve'))
-
 
     # --- Party size ---
     if party_size < 1 or party_size > MAX_PARTY:
@@ -397,7 +395,6 @@ def upload_members():
 
     try:
         content = file.read().decode('utf-8')
-        # Detect delimiter
         if '\t' in content.split('\n')[0]:
             delimiter = '\t'
         else:
@@ -405,10 +402,8 @@ def upload_members():
 
         reader = csv.DictReader(io.StringIO(content), delimiter=delimiter)
 
-        # Normalize field names
         count = 0
         for row in reader:
-            # Handle various column name formats
             clean = {}
             for key, val in row.items():
                 clean[key.strip().lower().replace(' ', '_')] = val.strip() if val else ''
