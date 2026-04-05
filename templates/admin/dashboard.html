@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Dashboard{% endblock %}
+
+{% block content %}
+<h1>Admin Dashboard</h1>
+
+<div class="dashboard-stats">
+    <div class="stat-card">
+        <span class="stat-number">{{ total_heads }}</span>
+        <span class="stat-label">Heads Reserved Today</span>
+    </div>
+    <div class="stat-card">
+        <span class="stat-number">{{ arrived_heads }}</span>
+        <span class="stat-label">Arrived</span>
+    </div>
+    <div class="stat-card">
+        <span class="stat-number">{{ capacity - total_heads }}</span>
+        <span class="stat-label">Spots Remaining</span>
+    </div>
+    <div class="stat-card">
+        <span class="stat-number stat-type-{{ today_type|lower|replace(' ', '-') }}">{{ today_type }}</span>
+        <span class="stat-label">Today's Type</span>
+    </div>
+</div>
+
+<div class="admin-actions">
+    <a href="{{ url_for('admin.members') }}" class="btn btn-secondary">👥 Manage Members</a>
+    <a href="{{ url_for('admin.calendar_editor') }}" class="btn btn-secondary">📅 Edit Calendar</a>
+    <a href="{{ url_for('admin.export_reservations', date_str=today.strftime('%Y-%m-%d')) }}" class="btn btn-secondary">📥 Export Today's List</a>
+</div>
+
+<h2>Today's Reservations — {{ today.strftime('%A, %B %d') }}</h2>
+
+{% if reservations %}
+<div class="table-wrapper">
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Code</th>
+                <th>Name</th>
+                <th>Owner #</th>
+                <th>Tier</th>
+                <th>Party</th>
+                <th>Arrived</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for r in reservations %}
+            <tr class="{% if r.arrived %}row-arrived{% endif %}">
+                <td><code>{{ r.confirmation_code }}</code></td>
+                <td>{{ r.member.last_name }}, {{ r.member.first_name }}</td>
+                <td>{{ r.member.owner_number }}</td>
+                <td><span class="tier-badge tier-{{ r.member.enrollment_type|lower }}">{{ r.member.enrollment_type }}</span></td>
+                <td>{{ r.party_size }}</td>
+                <td>
+                    <form method="POST" action="{{ url_for('admin.toggle_arrived', res_id=r.id) }}" style="display:inline;">
+                        <button type="submit" class="btn btn-small {% if r.arrived %}btn-arrived{% else %}btn-not-arrived{% endif %}">
+                            {% if r.arrived %}✅ Yes{% else %}⬜ No{% endif %}
+                        </button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<p class="empty-message">No reservations for today yet.</p>
+{% endif %}
+
+<h2>7-Day Overview</h2>
+<div class="table-wrapper">
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Type</th>
+                <th>Reserved</th>
+                <th>Capacity</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for day in upcoming %}
+            <tr>
+                <td>{{ day.date.strftime('%a %b %d') }}</td>
+                <td><span class="type-{{ day.day_type|lower|replace(' ', '-') }}">{{ day.day_type }}</span></td>
+                <td>{{ day.heads }}</td>
+                <td>{{ day.capacity }}</td>
+                <td><a href="{{ url_for('admin.reservations', date_str=day.date.strftime('%Y-%m-%d')) }}">View</a></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
