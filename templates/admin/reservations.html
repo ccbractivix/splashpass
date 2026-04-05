@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block title %}Reservations — {{ target_date.strftime('%b %d') }}{% endblock %}
+
+{% block content %}
+<h1>Reservations for {{ target_date.strftime('%A, %B %d, %Y') }}</h1>
+<p>Day type: <strong>{{ day_type }}</strong> | Reserved: <strong>{{ total_heads }}</strong> / {{ capacity }} | Arrived: <strong>{{ arrived_heads }}</strong></p>
+
+<div class="admin-actions">
+    <a href="{{ url_for('admin.dashboard') }}" class="btn btn-secondary">← Back to Dashboard</a>
+    <a href="{{ url_for('admin.export_reservations', date_str=target_date.strftime('%Y-%m-%d')) }}" class="btn btn-secondary">📥 Export CSV</a>
+</div>
+
+{% if reservations %}
+<div class="table-wrapper">
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Code</th>
+                <th>Name</th>
+                <th>Owner #</th>
+                <th>Tier</th>
+                <th>Party</th>
+                <th>Arrived</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for r in reservations %}
+            <tr class="{% if r.arrived %}row-arrived{% endif %}">
+                <td><code>{{ r.confirmation_code }}</code></td>
+                <td>{{ r.member.last_name }}, {{ r.member.first_name }}</td>
+                <td>{{ r.member.owner_number }}</td>
+                <td><span class="tier-badge tier-{{ r.member.enrollment_type|lower }}">{{ r.member.enrollment_type }}</span></td>
+                <td>{{ r.party_size }}</td>
+                <td>
+                    <form method="POST" action="{{ url_for('admin.toggle_arrived', res_id=r.id) }}" style="display:inline;">
+                        <button type="submit" class="btn btn-small {% if r.arrived %}btn-arrived{% else %}btn-not-arrived{% endif %}">
+                            {% if r.arrived %}✅ Yes{% else %}⬜ No{% endif %}
+                        </button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<p class="empty-message">No reservations for this date.</p>
+{% endif %}
+{% endblock %}
