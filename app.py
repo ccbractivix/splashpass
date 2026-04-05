@@ -23,17 +23,17 @@ db.init_app(app)
 
 login_manager = LoginManager()
 login_manager.init_app(app)
-login_manager.login_view = 'admin_bp.login'
+login_manager.login_view = 'admin_login'
 
 ET = pytz.timezone('US/Eastern')
 
 CAPACITY = 128
 MAX_PARTY = 6
 
-# ── Login loader ─────────────────────────────────────────────────
+
 @login_manager.user_loader
 def load_user(user_id):
-    return AdminUser.query.get(int(user_id))
+    return Admin.query.get(int(user_id))
 
 
 # ── Helpers ──────────────────────────────────────────────────────
@@ -44,17 +44,14 @@ def today_et():
     return now_et().date()
 
 def get_day_type(d):
-    """Return day type for a given date."""
-    override = DayOverride.query.filter_by(date=d).first()
+    override = DayType.query.filter_by(date=d).first()
     if override:
         return override.day_type
-    # Default: Saturday/Sunday = Weekend, else Weekday
     if d.weekday() >= 5:
         return 'Weekend'
     return 'Weekday'
 
 def heads_for_date(d):
-    """Total reserved heads for a date."""
     result = db.session.query(db.func.coalesce(db.func.sum(Reservation.party_size), 0))\
         .filter(Reservation.reservation_date == d).scalar()
     return result
@@ -65,11 +62,9 @@ def arrived_heads_for_date(d):
     return result
 
 def generate_code():
-    """8-char uppercase alphanumeric."""
     return secrets.token_hex(4).upper()
 
 def make_qr_b64(data):
-    """Generate a QR code and return base64 PNG."""
     qr = qrcode.QRCode(version=1, box_size=6, border=2)
     qr.add_data(data)
     qr.make(fit=True)
@@ -79,15 +74,13 @@ def make_qr_b64(data):
     return base64.b64encode(buf.getvalue()).decode()
 
 def available_dates_for_member(member):
-    """Return list of dates the member may book."""
     t = today_et()
     n = now_et()
-    tier = member.enrollment_type  # Platinum, Gold, Silver
+    tier = member.enrollment_type
 
     if tier == 'Platinum':
-        dates = [t + timedelta(days=i) for i in range(7)]  # today + 6
+        dates = [t + timedelta(days=i) for i in range(7)]
     else:
-        # Same-day only, but only if within 07:00–20:00 ET
         hour = n.hour
         if 7 <= hour < 20:
             dates = [t]
@@ -101,18 +94,14 @@ def available_dates_for_member(member):
             continue
         if tier == 'Gold' and dt == 'High Use':
             continue
-        # Platinum gets everything
         allowed.append(d)
     return allowed
 
 
-# ── Calendar helper ──────────────────────────────────────────────
 def build_months(year):
-    """Build month data for the calendar editor / print view."""
     months = []
     for m in range(1, 13):
-        first_weekday = cal_mod.monthrange(year, m)[0]  # 0=Mon
-        # Convert to Sunday-start: Sun=0
+        first_weekday = cal_mod.monthrange(year, m)[0]
         first_weekday = (first_weekday + 1) % 7
         num_days = cal_mod.monthrange(year, m)[1]
         days = []
@@ -146,18 +135,24 @@ def reserve():
 
     step = request.form.get('step', 'identify')
 
-    # ── Step 1: Look up member ───────────────────────────────────
     if step == 'identify':
         owner = request.form.get('owner_number', '').strip()
-        member = Member.query.filter_by(owner_number=owner, is_active=True).first()
+        member = Member.query.filter_by(owner_number=owner, active=True).first()
         if not member:
             flash('Owner number not found or membership is inactive.', 'error')
             return render_template('reserve.html', step='identify')
 
-        # Check expiration
-        if member.expiration_date and member.expiration_date < today_et():
-            flash('Your membership has expired.', 'error')
-            return render_template('reserve.html', step='identify')
+        if member.expiration_date:
+            try:
+                if isinstance(member.expiration_date, str):
+                    exp = datetime.strptime(member.expiration_date, '%Y-%m-%d').date()
+                else:
+                    exp = member.expiration_date
+                if exp < today_et():
+                    flash('Your membership has expired.', 'error')
+                    return render_template('reserve.html', step='identify')
+            except (ValueError, TypeError):
+                pass
 
         dates = available_dates_for_member(member)
         if not dates:
@@ -177,10 +172,9 @@ def reserve():
         return render_template('reserve.html', step='select',
                                member=member, date_info=date_info, max_party=MAX_PARTY)
 
-    # ── Step 2: Confirm reservation ──────────────────────────────
     if step == 'confirm':
         owner = request.form.get('owner_number', '').strip()
-        member = Member.query.filter_by(owner_number=owner, is_active=True).first()
+        member = Member.query.filter_by(owner_number=owner, active=True).first()
         if not member:
             flash('Session error. Please start over.', 'error')
             return redirect(url_for('reserve'))
@@ -195,26 +189,22 @@ def reserve():
         party_size = int(request.form.get('party_size', 1))
         party_size = max(1, min(party_size, MAX_PARTY))
 
-        # Validate date is allowed
         allowed = available_dates_for_member(member)
         if res_date not in allowed:
             flash('That date is not available for your tier.', 'error')
             return redirect(url_for('reserve'))
 
-        # Check capacity
         current_heads = heads_for_date(res_date)
         if current_heads + party_size > CAPACITY:
             flash(f'Not enough capacity. Only {CAPACITY - current_heads} spots remain.', 'error')
             return redirect(url_for('reserve'))
 
-        # One reservation per member per day
         existing = Reservation.query.filter_by(
             member_id=member.id, reservation_date=res_date).first()
         if existing:
             flash('You already have a reservation for this date.', 'warning')
             return redirect(url_for('reserve'))
 
-        # Create reservation
         code = generate_code()
         while Reservation.query.filter_by(confirmation_code=code).first():
             code = generate_code()
@@ -224,7 +214,6 @@ def reserve():
             reservation_date=res_date,
             party_size=party_size,
             confirmation_code=code,
-            day_type=get_day_type(res_date),
         )
         db.session.add(reservation)
         db.session.commit()
@@ -248,8 +237,8 @@ def admin_login():
     if request.method == 'POST':
         username = request.form.get('username', '')
         password = request.form.get('password', '')
-        user = AdminUser.query.filter_by(username=username).first()
-        if user and user.check_password(password):
+        user = Admin.query.filter_by(username=username).first()
+        if user and user.password_hash == password:
             login_user(user)
             return redirect(url_for('admin_dashboard'))
         flash('Invalid credentials.', 'error')
@@ -317,7 +306,6 @@ def toggle_arrived(res_id):
     r = Reservation.query.get_or_404(res_id)
     r.arrived = not r.arrived
     db.session.commit()
-    # Redirect back to where we came from
     ref = request.referrer or url_for('admin_dashboard')
     return redirect(ref)
 
@@ -356,7 +344,7 @@ def admin_members():
     search = request.args.get('search', '').strip()
     tier_filter = request.args.get('tier', '').strip()
 
-    query = Member.query.filter_by(is_active=True)
+    query = Member.query.filter_by(active=True)
     if search:
         like = f'%{search}%'
         query = query.filter(
@@ -370,7 +358,7 @@ def admin_members():
         query = query.filter_by(enrollment_type=tier_filter)
 
     members = query.order_by(Member.last_name, Member.first_name).limit(200).all()
-    total_count = Member.query.filter_by(is_active=True).count()
+    total_count = Member.query.filter_by(active=True).count()
 
     return render_template('admin/members.html',
                            members=members, search=search,
@@ -389,7 +377,6 @@ def upload_members():
     except UnicodeDecodeError:
         content = file.read().decode('latin-1')
 
-    # Detect delimiter
     if '\t' in content[:500]:
         delimiter = '\t'
     else:
@@ -397,7 +384,6 @@ def upload_members():
 
     reader = csv.DictReader(StringIO(content), delimiter=delimiter)
 
-    # Normalize headers
     if reader.fieldnames:
         reader.fieldnames = [h.strip() for h in reader.fieldnames]
 
@@ -415,16 +401,7 @@ def upload_members():
         first_name = row.get('FirstName', '').strip()
         enrollment = row.get('EnrollmentType', '').strip()
         membership = row.get('Membership', '').strip()
-
         exp_str = row.get('ExpirationDate', '').strip()
-        exp_date = None
-        if exp_str:
-            for fmt in ('%m/%d/%Y', '%Y-%m-%d', '%m-%d-%Y', '%m/%d/%y'):
-                try:
-                    exp_date = datetime.strptime(exp_str, fmt).date()
-                    break
-                except ValueError:
-                    continue
 
         existing = Member.query.filter_by(owner_number=owner).first()
         if existing:
@@ -432,8 +409,8 @@ def upload_members():
             existing.first_name = first_name
             existing.enrollment_type = enrollment
             existing.membership = membership
-            existing.expiration_date = exp_date
-            existing.is_active = True
+            existing.expiration_date = exp_str if exp_str else None
+            existing.active = True
             updated += 1
         else:
             m = Member(
@@ -442,20 +419,19 @@ def upload_members():
                 first_name=first_name,
                 enrollment_type=enrollment,
                 membership=membership,
-                expiration_date=exp_date,
-                is_active=True,
+                expiration_date=exp_str if exp_str else None,
+                active=True,
             )
             db.session.add(m)
             added += 1
 
-    # Deactivate members not in this upload
     if seen_owners:
         Member.query.filter(~Member.owner_number.in_(seen_owners))\
-            .update({Member.is_active: False}, synchronize_session='fetch')
+            .update({Member.active: False}, synchronize_session='fetch')
 
     db.session.commit()
     flash(f'Import complete: {added} added, {updated} updated, '
-          f'{Member.query.filter_by(is_active=False).count()} deactivated.', 'success')
+          f'{Member.query.filter_by(active=False).count()} deactivated.', 'success')
     return redirect(url_for('admin_members'))
 
 
@@ -483,19 +459,17 @@ def admin_calendar_set_day():
     if day_type not in ('Weekday', 'Weekend', 'High Use'):
         return ('Bad type', 400)
 
-    # Determine default type for this date
     default = 'Weekend' if d.weekday() >= 5 else 'Weekday'
 
-    override = DayOverride.query.filter_by(date=d).first()
+    override = DayType.query.filter_by(date=d).first()
     if day_type == default:
-        # Remove override if it matches default
         if override:
             db.session.delete(override)
     else:
         if override:
             override.day_type = day_type
         else:
-            override = DayOverride(date=d, day_type=day_type)
+            override = DayType(date=d, day_type=day_type)
             db.session.add(override)
 
     db.session.commit()
@@ -513,14 +487,15 @@ def admin_calendar_print(year):
 #  INIT
 # ══════════════════════════════════════════════════════════════════
 def init_db():
-    """Create tables and seed admin user if needed."""
     db.create_all()
-    if not AdminUser.query.first():
-        admin = AdminUser(username='admin')
-        admin.set_password(os.environ.get('ADMIN_PASSWORD', 'changeme'))
+    if not Admin.query.first():
+        admin = Admin(
+            username='admin',
+            password_hash=os.environ.get('ADMIN_PASSWORD', 'changeme')
+        )
         db.session.add(admin)
         db.session.commit()
-        print('✅ Default admin user created (username: admin)')
+        print('Default admin user created (username: admin)')
 
 with app.app_context():
     init_db()
