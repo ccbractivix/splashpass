@@ -149,10 +149,10 @@ def reserve():
         flash('Cannot book in the past.', 'danger')
         return redirect(url_for('reserve'))
 
-    # --- Membership rules ---
+       # --- Membership rules ---
     days_ahead = (res_date - now).days
     day_type = get_day_type(res_date)
-        tier = member.membership.strip().lower()
+    tier = member.membership.strip().lower()
 
     if tier == 'platinum':
         if days_ahead > 6:
@@ -175,6 +175,7 @@ def reserve():
     else:
         flash('Unknown membership tier.', 'danger')
         return redirect(url_for('reserve'))
+
 
     # --- Party size ---
     if party_size < 1 or party_size > MAX_PARTY:
