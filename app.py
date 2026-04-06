@@ -415,7 +415,7 @@ def upload_members():
             first_name = clean.get('firstname', clean.get('first_name', ''))
             enrollment_type = clean.get('enrollmenttype', clean.get('enrollment_type', ''))
             expiration_date = clean.get('expirationdate', clean.get('expiration_date', ''))
-            membership = clean.get('membership', '')
+            membership = clean.get('membership', '').title()
 
             if not owner_number or not membership:
                 continue
