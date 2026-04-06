@@ -1,6 +1,7 @@
 import os, io, csv, base64, string, random, calendar as cal_module
 from datetime import datetime, timedelta, date
 from functools import wraps
+from collections import OrderedDict
 
 from flask import (
     Flask, render_template, request, redirect, url_for,
@@ -111,6 +112,15 @@ def checkin_required(f):
             return redirect(url_for('checkin_login'))
         return f(*args, **kwargs)
     return decorated
+
+def get_week_of_month(d):
+    """Return 0-based week index within the month (by calendar row)."""
+    cal = cal_module.Calendar(firstweekday=6)
+    weeks = cal.monthdatescalendar(d.year, d.month)
+    for i, week in enumerate(weeks):
+        if d in week:
+            return i
+    return 0
 
 # ---------------------------------------------------------------------------
 # Public routes
@@ -328,7 +338,6 @@ def checkin_search():
         flash('Please enter a confirmation code or owner number.', 'danger')
         return redirect(url_for('checkin_dashboard'))
 
-    # Try confirmation code first
     reservation = Reservation.query.filter_by(
         confirmation_code=query, reservation_date=today).first()
 
@@ -336,7 +345,6 @@ def checkin_search():
         return render_template('checkin/result.html',
                                reservations=[reservation], query=query, today=today)
 
-    # Try owner number
     member = Member.query.filter_by(owner_number=query).first()
     if member:
         reservations = Reservation.query.filter_by(
@@ -469,7 +477,6 @@ def upload_members():
 
     try:
         raw = file.read()
-        # Strip BOM
         if raw[:3] == b'\xef\xbb\xbf':
             raw = raw[3:]
         content = raw.decode('utf-8')
@@ -479,7 +486,6 @@ def upload_members():
 
         reader = csv.DictReader(io.StringIO(content), delimiter=delimiter)
 
-        # Build normalized header map: normalized_key -> original_key
         raw_headers = reader.fieldnames or []
         header_map = {}
         for h in raw_headers:
@@ -488,7 +494,6 @@ def upload_members():
             normalized = h.strip().lower().replace(' ', '_').replace('-', '_')
             header_map[normalized] = h
 
-        # Flexible column finder
         def find_col(candidates):
             for c in candidates:
                 if c in header_map:
@@ -532,7 +537,6 @@ def upload_members():
                 skipped += 1
                 continue
 
-            # Parse membership with fuzzy matching
             raw_mem = (row.get(mem_col) or '').strip() if mem_col else ''
             membership = None
             raw_lower = raw_mem.lower()
@@ -587,7 +591,7 @@ def upload_members():
     return redirect(url_for('admin_members'))
 
 # ---------------------------------------------------------------------------
-# Admin calendar — full month grid with bulk save
+# Admin calendar — visual month grid with color coding
 # ---------------------------------------------------------------------------
 @app.route('/admin/calendar')
 @admin_required
@@ -596,7 +600,6 @@ def admin_calendar():
     year = request.args.get('year', today.year, type=int)
     month = request.args.get('month', today.month, type=int)
 
-    # Clamp month to valid range
     if month < 1:
         month = 12
         year -= 1
@@ -618,7 +621,9 @@ def admin_calendar():
                     'date': d,
                     'day_type': day_type,
                     'capacity': capacity,
-                    'used': used
+                    'used': used,
+                    'is_past': d < today,
+                    'is_today': d == today
                 })
             else:
                 week_data.append(None)
@@ -629,6 +634,12 @@ def admin_calendar():
     next_month = month + 1 if month < 12 else 1
     next_year = year if month < 12 else year + 1
 
+    # Check if last year's same month has data for copy button
+    last_year_count = DayType.query.filter(
+        db.extract('year', DayType.date) == year - 1,
+        db.extract('month', DayType.date) == month
+    ).count()
+
     return render_template('admin/calendar.html',
                            weeks=weeks,
                            month=month,
@@ -638,8 +649,114 @@ def admin_calendar():
                            prev_year=prev_year,
                            prev_month=prev_month,
                            next_year=next_year,
-                           next_month=next_month)
+                           next_month=next_month,
+                           last_year_has_data=last_year_count > 0)
 
+@app.route('/admin/calendar/copy-last-year', methods=['POST'])
+@admin_required
+def admin_calendar_copy_last_year():
+    """Copy day types from same month last year, matching by week-of-month
+    and day-of-week (not by exact date)."""
+    year = request.form.get('year', type=int)
+    month = request.form.get('month', type=int)
+
+    if not year or not month:
+        flash('Invalid month/year.', 'danger')
+        return redirect(url_for('admin_calendar'))
+
+    last_year = year - 1
+
+    # Build last year's calendar grid (Sunday-start)
+    cal = cal_module.Calendar(firstweekday=6)
+
+    # Last year's month: build map of (week_index, weekday) -> day_type
+    ly_weeks = cal.monthdatescalendar(last_year, month)
+    ly_map = {}  # (week_idx, weekday) -> day_type
+    for wi, week in enumerate(ly_weeks):
+        for d in week:
+            if d.month == month:
+                dt = DayType.query.filter_by(date=d).first()
+                if dt:
+                    ly_map[(wi, d.weekday())] = dt.day_type
+
+    if not ly_map:
+        flash(f'No calendar data found for {date(last_year, month, 1).strftime("%B %Y")}.', 'warning')
+        return redirect(url_for('admin_calendar', year=year, month=month))
+
+    # This year's month: apply matching positions
+    ty_weeks = cal.monthdatescalendar(year, month)
+    applied = 0
+    for wi, week in enumerate(ty_weeks):
+        for d in week:
+            if d.month == month:
+                key = (wi, d.weekday())
+                if key in ly_map:
+                    day_type = ly_map[key]
+                    existing = DayType.query.filter_by(date=d).first()
+                    if existing:
+                        existing.day_type = day_type
+                    else:
+                        db.session.add(DayType(date=d, day_type=day_type))
+                    applied += 1
+
+    db.session.commit()
+    flash(f'Copied {applied} day types from {date(last_year, month, 1).strftime("%B %Y")} by week position.', 'success')
+    return redirect(url_for('admin_calendar', year=year, month=month))
+
+@app.route('/admin/calendar/copy-last-month', methods=['POST'])
+@admin_required
+def admin_calendar_copy_last_month():
+    """Copy day types from previous month, matching by week-of-month
+    and day-of-week."""
+    year = request.form.get('year', type=int)
+    month = request.form.get('month', type=int)
+
+    if not year or not month:
+        flash('Invalid month/year.', 'danger')
+        return redirect(url_for('admin_calendar'))
+
+    if month == 1:
+        prev_month = 12
+        prev_year = year - 1
+    else:
+        prev_month = month - 1
+        prev_year = year
+
+    cal = cal_module.Calendar(firstweekday=6)
+
+    # Previous month grid
+    pm_weeks = cal.monthdatescalendar(prev_year, prev_month)
+    pm_map = {}
+    for wi, week in enumerate(pm_weeks):
+        for d in week:
+            if d.month == prev_month:
+                dt = DayType.query.filter_by(date=d).first()
+                if dt:
+                    pm_map[(wi, d.weekday())] = dt.day_type
+
+    if not pm_map:
+        flash(f'No calendar data found for {date(prev_year, prev_month, 1).strftime("%B %Y")}.', 'warning')
+        return redirect(url_for('admin_calendar', year=year, month=month))
+
+    # This month grid
+    ty_weeks = cal.monthdatescalendar(year, month)
+    applied = 0
+    for wi, week in enumerate(ty_weeks):
+        for d in week:
+            if d.month == month:
+                key = (wi, d.weekday())
+                if key in pm_map:
+                    day_type = pm_map[key]
+                    existing = DayType.query.filter_by(date=d).first()
+                    if existing:
+                        existing.day_type = day_type
+                    else:
+                        db.session.add(DayType(date=d, day_type=day_type))
+                    applied += 1
+
+    db.session.commit()
+    flash(f'Copied {applied} day types from {date(prev_year, prev_month, 1).strftime("%B %Y")} by week position.', 'success')
+    return redirect(url_for('admin_calendar', year=year, month=month))
 
 @app.route('/admin/calendar/bulk', methods=['POST'])
 @admin_required
@@ -681,7 +798,6 @@ def admin_calendar_bulk():
     db.session.commit()
     flash(f'Saved {updated} days for {date(year, month, 1).strftime("%B %Y")}.', 'success')
     return redirect(url_for('admin_calendar', year=year, month=month))
-
 
 @app.route('/admin/set-day', methods=['POST'])
 @admin_required
@@ -731,6 +847,131 @@ def delete_reservation(res_id):
     db.session.commit()
     flash('Reservation deleted.', 'success')
     return redirect(url_for('admin_dashboard', date=res_date.isoformat()))
+
+# ---------------------------------------------------------------------------
+# Admin usage report — date range
+# ---------------------------------------------------------------------------
+@app.route('/admin/report')
+@admin_required
+def admin_report():
+    start_str = request.args.get('start', '')
+    end_str = request.args.get('end', '')
+
+    report_data = None
+    start_date = None
+    end_date = None
+    totals = None
+
+    if start_str and end_str:
+        try:
+            start_date = datetime.strptime(start_str, '%Y-%m-%d').date()
+            end_date = datetime.strptime(end_str, '%Y-%m-%d').date()
+        except ValueError:
+            flash('Invalid date format.', 'danger')
+            return render_template('admin/report.html')
+
+        if end_date < start_date:
+            flash('End date must be on or after start date.', 'danger')
+            return render_template('admin/report.html')
+
+        if (end_date - start_date).days > 366:
+            flash('Date range cannot exceed 366 days.', 'danger')
+            return render_template('admin/report.html')
+
+        report_data = []
+        total_reservations = 0
+        total_arrived = 0
+        total_headcount = 0
+        total_arrived_headcount = 0
+
+        d = start_date
+        while d <= end_date:
+            day_type, capacity = get_day_info(d)
+
+            day_reservations = Reservation.query.filter_by(reservation_date=d).all()
+            res_count = len(day_reservations)
+            arrived_count = sum(1 for r in day_reservations if r.arrived)
+            headcount = sum(r.party_size for r in day_reservations)
+            arrived_headcount = sum(r.party_size for r in day_reservations if r.arrived)
+
+            report_data.append({
+                'date': d,
+                'day_name': d.strftime('%A'),
+                'day_type': day_type,
+                'capacity': capacity,
+                'reservations': res_count,
+                'arrived': arrived_count,
+                'headcount': headcount,
+                'arrived_headcount': arrived_headcount,
+                'utilization': round((headcount / capacity) * 100, 1) if capacity > 0 else 0
+            })
+
+            total_reservations += res_count
+            total_arrived += arrived_count
+            total_headcount += headcount
+            total_arrived_headcount += arrived_headcount
+            d += timedelta(days=1)
+
+        totals = {
+            'reservations': total_reservations,
+            'arrived': total_arrived,
+            'headcount': total_headcount,
+            'arrived_headcount': total_arrived_headcount
+        }
+
+    return render_template('admin/report.html',
+                           report_data=report_data,
+                           start_date=start_date,
+                           end_date=end_date,
+                           totals=totals)
+
+@app.route('/admin/report/export')
+@admin_required
+def admin_report_export():
+    start_str = request.args.get('start', '')
+    end_str = request.args.get('end', '')
+
+    try:
+        start_date = datetime.strptime(start_str, '%Y-%m-%d').date()
+        end_date = datetime.strptime(end_str, '%Y-%m-%d').date()
+    except ValueError:
+        flash('Invalid date format.', 'danger')
+        return redirect(url_for('admin_report'))
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(['Date', 'Day', 'Day Type', 'Capacity', 'Reservations',
+                     'Checked In', 'Total Headcount', 'Arrived Headcount', 'Utilization %'])
+
+    d = start_date
+    while d <= end_date:
+        day_type, capacity = get_day_info(d)
+        day_reservations = Reservation.query.filter_by(reservation_date=d).all()
+        res_count = len(day_reservations)
+        arrived_count = sum(1 for r in day_reservations if r.arrived)
+        headcount = sum(r.party_size for r in day_reservations)
+        arrived_headcount = sum(r.party_size for r in day_reservations if r.arrived)
+        utilization = round((headcount / capacity) * 100, 1) if capacity > 0 else 0
+
+        writer.writerow([
+            d.isoformat(),
+            d.strftime('%A'),
+            day_type,
+            capacity,
+            res_count,
+            arrived_count,
+            headcount,
+            arrived_headcount,
+            utilization
+        ])
+        d += timedelta(days=1)
+
+    output.seek(0)
+    return Response(
+        output.getvalue(),
+        mimetype='text/csv',
+        headers={'Content-Disposition': f'attachment; filename=usage_report_{start_str}_to_{end_str}.csv'}
+    )
 
 # ---------------------------------------------------------------------------
 # Init
