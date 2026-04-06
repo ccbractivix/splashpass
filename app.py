@@ -1,4 +1,4 @@
-import os, io, csv, base64, string, random
+import os, io, csv, base64, string, random, calendar as cal_module
 from datetime import datetime, timedelta, date
 from functools import wraps
 
@@ -438,44 +438,96 @@ def upload_members():
 
     return redirect(url_for('admin_members'))
 
+# ---------------------------------------------------------------------------
+# Admin calendar — full month grid with bulk save
+# ---------------------------------------------------------------------------
 @app.route('/admin/calendar')
 @admin_required
 def admin_calendar():
-    year = request.args.get('year', type=int, default=today_eastern().year)
-    month = request.args.get('month', type=int, default=today_eastern().month)
+    today = today_eastern()
+    year = request.args.get('year', today.year, type=int)
+    month = request.args.get('month', today.month, type=int)
 
-    first_day = date(year, month, 1)
-    if month == 12:
-        last_day = date(year + 1, 1, 1) - timedelta(days=1)
-    else:
-        last_day = date(year, month + 1, 1) - timedelta(days=1)
+    cal = cal_module.Calendar(firstweekday=6)  # Sunday start
+    month_dates = cal.monthdatescalendar(year, month)
 
-    days = []
-    d = first_day
-    while d <= last_day:
-        day_type, capacity = get_day_info(d)
-        used = get_capacity_used(d)
-        days.append({
-            'date': d,
-            'day_type': day_type,
-            'capacity': capacity,
-            'used': used
-        })
-        d += timedelta(days=1)
+    weeks = []
+    for week in month_dates:
+        week_data = []
+        for d in week:
+            if d.month == month:
+                day_type, capacity = get_day_info(d)
+                used = get_capacity_used(d)
+                week_data.append({
+                    'date': d,
+                    'day_type': day_type,
+                    'capacity': capacity,
+                    'used': used
+                })
+            else:
+                week_data.append(None)
+        weeks.append(week_data)
 
-    prev_month = first_day - timedelta(days=1)
-    next_month = last_day + timedelta(days=1)
+    prev_month = month - 1 if month > 1 else 12
+    prev_year = year if month > 1 else year - 1
+    next_month = month + 1 if month < 12 else 1
+    next_year = year if month < 12 else year + 1
 
     return render_template('admin/calendar.html',
-                           days=days,
-                           year=year,
+                           weeks=weeks,
                            month=month,
-                           month_name=first_day.strftime('%B %Y'),
-                           prev_year=prev_month.year,
-                           prev_month=prev_month.month,
-                           next_year=next_month.year,
-                           next_month=next_month.month)
+                           year=year,
+                           today=today,
+                           month_name=date(year, month, 1).strftime('%B %Y'),
+                           prev_year=prev_year,
+                           prev_month=prev_month,
+                           next_year=next_year,
+                           next_month=next_month)
 
+
+@app.route('/admin/calendar/bulk', methods=['POST'])
+@admin_required
+def admin_calendar_bulk():
+    month = request.form.get('month', type=int)
+    year = request.form.get('year', type=int)
+
+    updated = 0
+    for key in request.form:
+        if key.startswith('type_'):
+            date_str = key.replace('type_', '')
+            try:
+                d = date.fromisoformat(date_str)
+            except ValueError:
+                continue
+
+            day_type = request.form.get(f'type_{date_str}', 'Weekday')
+            if day_type not in ('Weekday', 'Weekend', 'High Use'):
+                continue
+
+            cap_str = request.form.get(f'cap_{date_str}', '')
+            try:
+                capacity = int(cap_str) if cap_str else DEFAULT_CAPACITY
+                if capacity < 1:
+                    capacity = DEFAULT_CAPACITY
+            except ValueError:
+                capacity = DEFAULT_CAPACITY
+
+            existing = DayType.query.filter_by(date=d).first()
+            if existing:
+                existing.day_type = day_type
+                existing.capacity_override = capacity if capacity != DEFAULT_CAPACITY else None
+            else:
+                dt = DayType(date=d, day_type=day_type,
+                             capacity_override=capacity if capacity != DEFAULT_CAPACITY else None)
+                db.session.add(dt)
+            updated += 1
+
+    db.session.commit()
+    flash(f'Saved {updated} days for {date(year, month, 1).strftime("%B %Y")}.', 'success')
+    return redirect(url_for('admin_calendar', year=year, month=month))
+
+
+# Keep old single-day route for backward compatibility
 @app.route('/admin/set-day', methods=['POST'])
 @admin_required
 def set_day():
