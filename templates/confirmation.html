@@ -1,0 +1,21 @@
+{% extends 'base.html' %}
+{% block title %}Reservation Confirmed{% endblock %}
+{% block content %}
+<div class="card text-center">
+    <h2>✅ Reservation Confirmed!</h2>
+    <p><strong>{{ member.first_name }} {{ member.last_name }}</strong></p>
+    <p>Date: <strong>{{ reservation.reservation_date.strftime('%A, %B %d, %Y') }}</strong></p>
+    <p>Party Size: <strong>{{ reservation.party_size }}</strong></p>
+    <p>Confirmation Code: <strong style="font-size:1.4rem; letter-spacing:2px;">{{ reservation.confirmation_code }}</strong></p>
+
+    <div class="mt-1">
+        <img src="data:image/png;base64,{{ qr_data }}" alt="QR Code" style="max-width:200px;">
+    </div>
+    <p style="margin-top:0.5rem; color:#666; font-size:0.9rem;">Show this QR code at check-in.</p>
+
+    <div class="mt-1">
+        <a href="{{ url_for('book') }}" class="btn btn-primary">Make Another Reservation</a>
+        <a href="{{ url_for('index') }}" class="btn btn-secondary" style="margin-left:0.5rem;">Home</a>
+    </div>
+</div>
+{% endblock %}
