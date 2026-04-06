@@ -24,6 +24,7 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key')
 
 ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'admin')
+CHECKIN_PASSWORD = os.environ.get('CHECKIN_PASSWORD', 'checkin')
 DEFAULT_CAPACITY = 128
 EASTERN = pytz.timezone('US/Eastern')
 
@@ -100,6 +101,14 @@ def admin_required(f):
     def decorated(*args, **kwargs):
         if not session.get('admin_logged_in'):
             return redirect(url_for('admin_login'))
+        return f(*args, **kwargs)
+    return decorated
+
+def checkin_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not session.get('admin_logged_in') and not session.get('checkin_logged_in'):
+            return redirect(url_for('checkin_login'))
         return f(*args, **kwargs)
     return decorated
 
@@ -191,7 +200,6 @@ def reserve():
     today = today_eastern()
     tier = member.membership
 
-    # Validate booking window
     if tier == 'Platinum':
         if res_date < today or res_date > today + timedelta(days=6):
             flash('Date outside your booking window.', 'danger')
@@ -208,7 +216,6 @@ def reserve():
         flash('Unknown membership tier.', 'danger')
         return redirect(url_for('book'))
 
-    # Validate day type
     day_type, capacity = get_day_info(res_date)
 
     if tier == 'Silver' and day_type != 'Weekday':
@@ -218,19 +225,16 @@ def reserve():
         flash('Gold members cannot book High Use dates.', 'danger')
         return redirect(url_for('book'))
 
-    # Validate capacity
     used = get_capacity_used(res_date)
     if used + party_size > capacity:
-        flash(f'Not enough capacity. {capacity - used} spots remaining.', 'danger')
+        flash('Sorry, not enough availability for that date and party size.', 'danger')
         return redirect(url_for('book'))
 
-    # Check for existing reservation on same date
     existing = Reservation.query.filter_by(member_id=member.id, reservation_date=res_date).first()
     if existing:
         flash('You already have a reservation for this date.', 'warning')
         return redirect(url_for('book'))
 
-    # Create reservation
     code = generate_code()
     reservation = Reservation(
         confirmation_code=code,
@@ -270,6 +274,91 @@ def lookup():
     ).order_by(Reservation.reservation_date).all()
 
     return render_template('lookup.html', member=member, reservations=reservations)
+
+# ---------------------------------------------------------------------------
+# Check-in routes (front desk only)
+# ---------------------------------------------------------------------------
+@app.route('/checkin/login', methods=['GET', 'POST'])
+def checkin_login():
+    if request.method == 'GET':
+        return render_template('checkin/login.html')
+
+    password = request.form.get('password', '')
+    if password == CHECKIN_PASSWORD:
+        session['checkin_logged_in'] = True
+        return redirect(url_for('checkin_dashboard'))
+
+    flash('Invalid password.', 'danger')
+    return render_template('checkin/login.html')
+
+@app.route('/checkin/logout')
+def checkin_logout():
+    session.pop('checkin_logged_in', None)
+    return redirect(url_for('checkin_login'))
+
+@app.route('/checkin')
+@app.route('/checkin/dashboard')
+@checkin_required
+def checkin_dashboard():
+    today = today_eastern()
+    reservations = Reservation.query.filter_by(reservation_date=today)\
+        .order_by(Reservation.created_at).all()
+
+    day_type, capacity = get_day_info(today)
+    used = get_capacity_used(today)
+    arrived_count = sum(1 for r in reservations if r.arrived)
+    arrived_guests = sum(r.party_size for r in reservations if r.arrived)
+
+    return render_template('checkin/dashboard.html',
+                           reservations=reservations,
+                           today=today,
+                           day_type=day_type,
+                           capacity=capacity,
+                           used=used,
+                           arrived_count=arrived_count,
+                           arrived_guests=arrived_guests)
+
+@app.route('/checkin/search', methods=['POST'])
+@checkin_required
+def checkin_search():
+    query = request.form.get('query', '').strip().upper()
+    today = today_eastern()
+
+    if not query:
+        flash('Please enter a confirmation code or owner number.', 'danger')
+        return redirect(url_for('checkin_dashboard'))
+
+    # Try confirmation code first
+    reservation = Reservation.query.filter_by(
+        confirmation_code=query, reservation_date=today).first()
+
+    if reservation:
+        return render_template('checkin/result.html',
+                               reservations=[reservation], query=query, today=today)
+
+    # Try owner number
+    member = Member.query.filter_by(owner_number=query).first()
+    if member:
+        reservations = Reservation.query.filter_by(
+            member_id=member.id, reservation_date=today).all()
+        if reservations:
+            return render_template('checkin/result.html',
+                                   reservations=reservations, query=query, today=today)
+
+    flash(f'No reservation found for today matching "{query}".', 'warning')
+    return redirect(url_for('checkin_dashboard'))
+
+@app.route('/checkin/toggle/<int:res_id>', methods=['POST'])
+@checkin_required
+def checkin_toggle(res_id):
+    reservation = Reservation.query.get_or_404(res_id)
+    reservation.arrived = not reservation.arrived
+    db.session.commit()
+
+    source = request.form.get('source', 'dashboard')
+    if source == 'search':
+        flash(f'{"Checked in" if reservation.arrived else "Check-in removed"}: {reservation.confirmation_code}', 'success')
+    return redirect(url_for('checkin_dashboard'))
 
 # ---------------------------------------------------------------------------
 # Admin routes
@@ -380,12 +469,10 @@ def upload_members():
 
     try:
         raw = file.read()
-        # Strip BOM
         if raw[:3] == b'\xef\xbb\xbf':
             raw = raw[3:]
         content = raw.decode('utf-8')
 
-        # Detect delimiter
         first_line = content.split('\n')[0]
         delimiter = '\t' if '\t' in first_line else ','
 
@@ -447,6 +534,14 @@ def admin_calendar():
     today = today_eastern()
     year = request.args.get('year', today.year, type=int)
     month = request.args.get('month', today.month, type=int)
+
+    # Clamp month to valid range
+    if month < 1:
+        month = 12
+        year -= 1
+    elif month > 12:
+        month = 1
+        year += 1
 
     cal = cal_module.Calendar(firstweekday=6)  # Sunday start
     month_dates = cal.monthdatescalendar(year, month)
@@ -517,9 +612,9 @@ def admin_calendar_bulk():
                 existing.day_type = day_type
                 existing.capacity_override = capacity if capacity != DEFAULT_CAPACITY else None
             else:
-                dt = DayType(date=d, day_type=day_type,
-                             capacity_override=capacity if capacity != DEFAULT_CAPACITY else None)
-                db.session.add(dt)
+                dt_rec = DayType(date=d, day_type=day_type,
+                                 capacity_override=capacity if capacity != DEFAULT_CAPACITY else None)
+                db.session.add(dt_rec)
             updated += 1
 
     db.session.commit()
@@ -527,7 +622,6 @@ def admin_calendar_bulk():
     return redirect(url_for('admin_calendar', year=year, month=month))
 
 
-# Keep old single-day route for backward compatibility
 @app.route('/admin/set-day', methods=['POST'])
 @admin_required
 def set_day():
@@ -560,8 +654,8 @@ def set_day():
         existing.day_type = day_type
         existing.capacity_override = capacity
     else:
-        dt = DayType(date=d, day_type=day_type, capacity_override=capacity)
-        db.session.add(dt)
+        dt_rec = DayType(date=d, day_type=day_type, capacity_override=capacity)
+        db.session.add(dt_rec)
 
     db.session.commit()
     flash(f'{d} set to {day_type}.', 'success')
