@@ -1,49 +1,52 @@
-{% extends 'base.html' %}
+{% extends "base.html" %}
 {% block title %}Book a Reservation{% endblock %}
 {% block content %}
-<div class="card">
-    <h2>Book a Reservation</h2>
+<h2>Book a Reservation</h2>
 
-    {% if not member %}
-        <form method="POST">
-            <label for="owner_number">Owner Number</label>
-            <input type="text" id="owner_number" name="owner_number" placeholder="e.g. 6204848" required>
-            <button type="submit" class="btn btn-primary">Find My Account</button>
-        </form>
-    {% else %}
-        <p><strong>{{ member.first_name }} {{ member.last_name }}</strong> —
-           <span class="badge badge-{{ member.membership|lower }}">{{ member.membership }}</span>
-        </p>
+{% if not member %}
+  <form method="POST" style="max-width:400px;">
+    <div class="mb-3">
+      <label class="form-label">Owner Number</label>
+      <input type="text" name="owner_number" class="form-control" required autofocus>
+    </div>
+    <button type="submit" class="btn btn-primary">Find My Account</button>
+  </form>
+{% else %}
+  <div class="card mb-3" style="max-width:500px;">
+    <div class="card-body">
+      <h5>{{ member.first_name }} {{ member.last_name }}</h5>
+      <p class="mb-1">Owner #: {{ member.owner_number }}</p>
+      <p class="mb-0">Membership: <span class="badge bg-info">{{ member.membership }}</span></p>
+    </div>
+  </div>
 
-        {% if available_dates %}
-            <form method="POST" action="{{ url_for('reserve') }}">
-                <input type="hidden" name="owner_number" value="{{ member.owner_number }}">
+  {% if available_dates %}
+    <form method="POST" action="/reserve" style="max-width:500px;">
+      <input type="hidden" name="owner_number" value="{{ member.owner_number }}">
+      <div class="mb-3">
+        <label class="form-label">Select Date</label>
+        <select name="reservation_date" class="form-select" required>
+          {% for d in available_dates %}
+            <option value="{{ d.date.isoformat() }}">
+              {{ d.date.strftime('%A, %B %-d, %Y') }} — {{ d.day_type }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Party Size (max 6)</label>
+        <select name="party_size" class="form-select" required>
+          {% for i in range(1, 7) %}
+            <option value="{{ i }}">{{ i }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <button type="submit" class="btn btn-success">Confirm Reservation</button>
+    </form>
+  {% else %}
+    <div class="alert alert-warning">No dates available for your membership level.</div>
+  {% endif %}
 
-                <label for="reservation_date">Select Date</label>
-                <select id="reservation_date" name="reservation_date" required>
-                    {% for d in available_dates %}
-                        <option value="{{ d.date.isoformat() }}">
-                            {{ d.date.strftime('%A, %B %d, %Y') }} — {{ d.day_type }} ({{ d.remaining }} spots)
-                        </option>
-                    {% endfor %}
-                </select>
-
-                <label for="party_size">Party Size (1-6)</label>
-                <select id="party_size" name="party_size" required>
-                    {% for i in range(1, 7) %}
-                        <option value="{{ i }}">{{ i }}</option>
-                    {% endfor %}
-                </select>
-
-                <button type="submit" class="btn btn-success">Confirm Reservation</button>
-            </form>
-        {% else %}
-            <p class="mt-1">No available dates for your membership tier right now.</p>
-        {% endif %}
-
-        <div class="mt-1">
-            <a href="{{ url_for('book') }}" class="btn btn-secondary btn-sm">Start Over</a>
-        </div>
-    {% endif %}
-</div>
+  <a href="/book" class="btn btn-secondary mt-3">← Start Over</a>
+{% endif %}
 {% endblock %}
