@@ -393,21 +393,25 @@ def upload_members():
         return redirect(url_for('admin_members'))
 
     try:
-        content = file.read().decode('utf-8')
+        raw = file.read()
+        # Handle BOM
+        if raw[:3] == b'\xef\xbb\xbf':
+            raw = raw[3:]
+        content = raw.decode('utf-8')
+
         # Detect delimiter
-        if '\t' in content.split('\n')[0]:
-            delimiter = '\t'
-        else:
-            delimiter = ','
+        first_line = content.split('\n')[0]
+        delimiter = '\t' if '\t' in first_line else ','
 
         reader = csv.DictReader(io.StringIO(content), delimiter=delimiter)
 
-        # Normalize field names
         count = 0
+        skipped = 0
         for row in reader:
-            # Handle various column name formats
             clean = {}
             for key, val in row.items():
+                if key is None:
+                    continue
                 clean[key.strip().lower().replace(' ', '_')] = val.strip() if val else ''
 
             owner_number = clean.get('ownernumber', clean.get('owner_number', ''))
@@ -415,9 +419,15 @@ def upload_members():
             first_name = clean.get('firstname', clean.get('first_name', ''))
             enrollment_type = clean.get('enrollmenttype', clean.get('enrollment_type', ''))
             expiration_date = clean.get('expirationdate', clean.get('expiration_date', ''))
-            membership = clean.get('membership', '').title()
+            membership_raw = clean.get('membership', '').strip().title()
 
-            if not owner_number or not membership:
+            # Validate membership tier
+            if membership_raw not in ('Platinum', 'Gold', 'Silver'):
+                skipped += 1
+                continue
+
+            if not owner_number:
+                skipped += 1
                 continue
 
             existing = Member.query.filter_by(owner_number=owner_number).first()
@@ -426,7 +436,7 @@ def upload_members():
                 existing.first_name = first_name
                 existing.enrollment_type = enrollment_type
                 existing.expiration_date = expiration_date
-                existing.membership = membership
+                existing.membership = membership_raw
                 existing.active = True
             else:
                 m = Member(
@@ -435,15 +445,16 @@ def upload_members():
                     first_name=first_name,
                     enrollment_type=enrollment_type,
                     expiration_date=expiration_date,
-                    membership=membership,
+                    membership=membership_raw,
                     active=True
                 )
                 db.session.add(m)
             count += 1
 
         db.session.commit()
-        flash(f'Loaded {count} members.', 'success')
+        flash(f'Loaded {count} members. Skipped {skipped}.', 'success')
     except Exception as e:
+        db.session.rollback()
         flash(f'Error processing file: {str(e)}', 'danger')
 
     return redirect(url_for('admin_members'))
