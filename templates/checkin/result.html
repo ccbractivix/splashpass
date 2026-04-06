@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Check-In Result{% endblock %}
+{% block content %}
+<h2>🔍 Search Result</h2>
+
+{% if reservations %}
+  {% for r in reservations %}
+    <div class="card mb-3 {{ 'border-success' if r.arrived else '' }}" style="max-width:600px;">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-start">
+          <div>
+            <h4>{{ r.member.first_name }} {{ r.member.last_name }}</h4>
+            <p class="mb-1">Owner #: <strong>{{ r.member.owner_number }}</strong></p>
+            <p class="mb-1">Confirmation: <code style="font-size:1.2em;">{{ r.confirmation_code }}</code></p>
+            <p class="mb-1">Membership: <span class="badge bg-info">{{ r.member.membership }}</span></p>
+            <p class="mb-1">Party Size: <strong>{{ r.party_size }}</strong></p>
+          </div>
+          <div class="text-end">
+            {% if r.arrived %}
+              <span class="badge bg-success fs-5">✓ Arrived</span>
+            {% else %}
+              <span class="badge bg-warning fs-5">Not Yet</span>
+            {% endif %}
+          </div>
+        </div>
+        <hr>
+        <form method="POST" action="{{ url_for('checkin_toggle', res_id=r.id) }}">
+          <input type="hidden" name="source" value="search">
+          <button type="submit" class="btn {{ 'btn-outline-danger' if r.arrived else 'btn-success btn-lg' }} w-100">
+            {{ '↩ Undo Check-In' if r.arrived else '✓ Check In Now' }}
+          </button>
+        </form>
+      </div>
+    </div>
+  {% endfor %}
+{% endif %}
+
+<a href="{{ url_for('checkin_dashboard') }}" class="btn btn-secondary mt-2">← Back to Check-In</a>
+{% endblock %}
