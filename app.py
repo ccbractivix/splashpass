@@ -68,6 +68,8 @@ class Reservation(db.Model):
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+REPORT_LINK = ' <a href="/report" class="alert-link">Report a Problem</a>'
+
 def now_eastern():
     return datetime.now(EASTERN)
 
@@ -148,12 +150,12 @@ def book():
 
     owner_number = request.form.get('owner_number', '').strip()
     if not owner_number:
-        flash('Member number not found. Please check your number and try again. <a href="/report" class="alert-link">Report a Problem</a>', 'danger')
+        flash('Member number not found. Please check your number and try again.' + REPORT_LINK, 'danger')
         return render_template('book.html')
 
     member = Member.query.filter_by(owner_number=owner_number, active=True).first()
     if not member:
-        flash('Member number not found. Please check your number and try again. <a href="/report" class="alert-link">Report a Problem</a>', 'danger')
+        flash('Member number not found. Please check your number and try again.' + REPORT_LINK, 'danger')
         return render_template('book.html')
 
     today = today_eastern()
@@ -166,7 +168,7 @@ def book():
     elif tier == 'Silver':
         max_date = today
     else:
-        flash('Member number not found. Please check your number and try again. <a href="/report" class="alert-link">Report a Problem</a>', 'danger')
+        flash('Unknown membership tier.' + REPORT_LINK, 'danger')
         return render_template('book.html')
 
     available_dates = []
@@ -202,13 +204,13 @@ def reserve():
 
     member = Member.query.filter_by(owner_number=owner_number, active=True).first()
     if not member:
-        flash('Member number not found. Please check your number and try again. <a href="/report" class="alert-link">Report a Problem</a>', 'danger')
+        flash('Member number not found. Please check your number and try again.' + REPORT_LINK, 'danger')
         return redirect(url_for('book'))
 
     try:
         res_date = datetime.strptime(reservation_date_str, '%Y-%m-%d').date()
     except ValueError:
-        flash('Member number not found. Please check your number and try again. <a href="/report" class="alert-link">Report a Problem</a>', 'danger')
+        flash('Invalid date selected.' + REPORT_LINK, 'danger')
         return redirect(url_for('book'))
 
     try:
@@ -224,32 +226,32 @@ def reserve():
 
     if tier == 'Platinum':
         if res_date < today or res_date > today + timedelta(days=6):
-            flash('Date outside your booking window.', 'danger')
+            flash('Date outside your booking window.' + REPORT_LINK, 'danger')
             return redirect(url_for('book'))
     elif tier == 'Gold':
         if res_date != today:
-            flash('Gold members can only book same-day.', 'danger')
+            flash('Gold members can only book same-day.' + REPORT_LINK, 'danger')
             return redirect(url_for('book'))
     elif tier == 'Silver':
         if res_date != today:
-            flash('Silver members can only book same-day.', 'danger')
+            flash('Silver members can only book same-day.' + REPORT_LINK, 'danger')
             return redirect(url_for('book'))
     else:
-        flash('Unknown membership tier.', 'danger')
+        flash('Unknown membership tier.' + REPORT_LINK, 'danger')
         return redirect(url_for('book'))
 
     day_type, capacity = get_day_info(res_date)
 
     if tier == 'Silver' and day_type != 'Weekday':
-        flash('Silver members can only book Weekday dates.', 'danger')
+        flash('Silver members can only book Weekday dates.' + REPORT_LINK, 'danger')
         return redirect(url_for('book'))
     if tier == 'Gold' and day_type == 'High Use':
-        flash('Gold members cannot book High Use dates.', 'danger')
+        flash('Gold members cannot book High Use dates.' + REPORT_LINK, 'danger')
         return redirect(url_for('book'))
 
     used = get_capacity_used(res_date)
     if used + party_size > capacity:
-        flash('Sorry, not enough availability for that date and party size.', 'danger')
+        flash('Sorry, not enough availability for that date and party size.' + REPORT_LINK, 'danger')
         return redirect(url_for('book'))
 
     existing = Reservation.query.filter_by(member_id=member.id, reservation_date=res_date).first()
@@ -703,10 +705,6 @@ def admin_calendar():
 @app.route('/admin/calendar/copy-previous-year', methods=['POST'])
 @admin_required
 def admin_calendar_copy_previous_year():
-    """Copy day types from the SAME MONTH in the PREVIOUS YEAR.
-    Matches by week-of-month position + day-of-week so that e.g.
-    the 2nd-week Friday/Saturday/Sunday keep their types even though
-    the actual dates shift year to year."""
     year = request.form.get('year', type=int)
     month = request.form.get('month', type=int)
 
@@ -716,11 +714,10 @@ def admin_calendar_copy_previous_year():
 
     source_year = year - 1
 
-    cal = cal_module.Calendar(firstweekday=6)  # Sunday-start
+    cal = cal_module.Calendar(firstweekday=6)
 
-    # Build source map: (week_index, weekday) -> day_type
     source_weeks = cal.monthdatescalendar(source_year, month)
-    source_map = {}  # (week_idx, weekday) -> day_type
+    source_map = {}
     for wi, week in enumerate(source_weeks):
         for d in week:
             if d.month == month:
@@ -732,7 +729,6 @@ def admin_calendar_copy_previous_year():
         flash(f'No calendar data found for {date(source_year, month, 1).strftime("%B %Y")}.', 'warning')
         return redirect(url_for('admin_calendar', year=year, month=month))
 
-    # Apply to target year at matching positions
     target_weeks = cal.monthdatescalendar(year, month)
     applied = 0
     for wi, week in enumerate(target_weeks):
@@ -756,8 +752,6 @@ def admin_calendar_copy_previous_year():
 @app.route('/admin/calendar/copy-previous-month', methods=['POST'])
 @admin_required
 def admin_calendar_copy_previous_month():
-    """Copy day types from the PREVIOUS MONTH (same or prior year).
-    Matches by week-of-month position + day-of-week."""
     year = request.form.get('year', type=int)
     month = request.form.get('month', type=int)
 
