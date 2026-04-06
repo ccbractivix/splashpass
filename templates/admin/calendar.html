@@ -1,51 +1,182 @@
 {% extends "base.html" %}
-{% block title %}Calendar Editor{% endblock %}
+{% block title %}Calendar Manager{% endblock %}
 {% block content %}
-<h2>Calendar Editor — {{ month_name }}</h2>
+<style>
+  .cal-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 2px;
+    font-size: 0.85rem;
+  }
+  .cal-header {
+    background: #343a40;
+    color: white;
+    text-align: center;
+    padding: 8px 4px;
+    font-weight: bold;
+  }
+  .cal-cell {
+    border: 1px solid #dee2e6;
+    min-height: 100px;
+    padding: 4px;
+    position: relative;
+    background: white;
+  }
+  .cal-cell.past { opacity: 0.5; }
+  .cal-cell.today { border: 3px solid #0d6efd; }
+  .cal-cell.empty { background: #f8f9fa; border-color: #f0f0f0; }
+  .cal-cell .date-num {
+    font-weight: bold;
+    font-size: 1rem;
+    margin-bottom: 2px;
+  }
+  .cal-cell select {
+    font-size: 0.75rem;
+    padding: 1px 2px;
+    width: 100%;
+    margin-bottom: 2px;
+  }
+  .cal-cell input[type="number"] {
+    font-size: 0.75rem;
+    padding: 1px 2px;
+    width: 100%;
+  }
+  .cal-cell .usage-bar {
+    margin-top: 3px;
+    height: 4px;
+    background: #e9ecef;
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .cal-cell .usage-bar .fill {
+    height: 100%;
+    border-radius: 2px;
+  }
+  .cal-cell .usage-text {
+    font-size: 0.7rem;
+    color: #666;
+    margin-top: 1px;
+  }
+  /* Color coding by day type */
+  .type-weekday { border-left: 4px solid #0d6efd; }
+  .type-weekend { border-left: 4px solid #198754; }
+  .type-highuse { border-left: 4px solid #dc3545; }
 
-<div class="d-flex justify-content-between mb-3" style="max-width:900px;">
-  <a href="{{ url_for('admin_calendar', year=prev_year, month=prev_month) }}" class="btn btn-outline-secondary">← Previous</a>
-  <a href="{{ url_for('admin_calendar', year=next_year, month=next_month) }}" class="btn btn-outline-secondary">Next →</a>
+  .legend-dot {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border-radius: 2px;
+    margin-right: 4px;
+    vertical-align: middle;
+  }
+</style>
+
+<h2>Calendar Manager</h2>
+<a href="/admin" class="btn btn-secondary mb-3">← Admin Dashboard</a>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    {% for category, message in messages %}
+      <div class="alert alert-{{ category }}">{{ message }}</div>
+    {% endfor %}
+  {% endif %}
+{% endwith %}
+
+<!-- Month navigation -->
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <a href="{{ url_for('admin_calendar', year=prev_year, month=prev_month) }}" class="btn btn-outline-secondary">
+    ← Previous
+  </a>
+  <h3 class="mb-0">{{ month_name }}</h3>
+  <a href="{{ url_for('admin_calendar', year=next_year, month=next_month) }}" class="btn btn-outline-secondary">
+    Next →
+  </a>
 </div>
 
-<form method="POST" action="{{ url_for('admin_calendar_bulk') }}">
-  <input type="hidden" name="month" value="{{ month }}">
-  <input type="hidden" name="year" value="{{ year }}">
+<!-- Legend -->
+<div class="mb-3">
+  <span class="legend-dot" style="background:#0d6efd;"></span> Weekday
+  <span class="ms-3 legend-dot" style="background:#198754;"></span> Weekend
+  <span class="ms-3 legend-dot" style="background:#dc3545;"></span> High Use
+</div>
 
-  <table class="table table-bordered text-center" style="max-width:900px;">
-    <thead class="table-dark">
-      <tr>
-        <th>Sun</th><th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th><th>Fri</th><th>Sat</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for week in weeks %}
-      <tr>
-        {% for day in week %}
-        <td style="vertical-align:top; padding:6px; min-width:110px; height:120px;
-          {% if day and day.date == today %}background:#fff3cd;{% elif day and day.day_type == 'High Use' %}background:#f8d7da;{% elif day and day.day_type == 'Weekend' %}background:#d1ecf1;{% endif %}">
-          {% if day %}
-            <strong>{{ day.date.day }}</strong><br>
-            <select name="type_{{ day.date.isoformat() }}" class="form-select form-select-sm mt-1">
+<!-- Copy buttons -->
+<div class="d-flex flex-wrap gap-2 mb-3">
+  {% if last_year_has_data %}
+  <form method="POST" action="{{ url_for('admin_calendar_copy_last_year') }}"
+        onsubmit="return confirm('Copy day types from {{ year - 1 }} {{ month_name.split()[0] }}? This matches by week position and day of week, not exact dates. Existing entries will be overwritten.')">
+    <input type="hidden" name="year" value="{{ year }}">
+    <input type="hidden" name="month" value="{{ month }}">
+    <button type="submit" class="btn btn-outline-warning">
+      📋 Copy from {{ month_name.split()[0] }} {{ year - 1 }} (by week position)
+    </button>
+  </form>
+  {% endif %}
+
+  <form method="POST" action="{{ url_for('admin_calendar_copy_last_month') }}"
+        onsubmit="return confirm('Copy day types from last month? This matches by week position and day of week. Existing entries will be overwritten.')">
+    <input type="hidden" name="year" value="{{ year }}">
+    <input type="hidden" name="month" value="{{ month }}">
+    <button type="submit" class="btn btn-outline-secondary">
+      📋 Copy from Previous Month (by week position)
+    </button>
+  </form>
+</div>
+
+<!-- Calendar grid form -->
+<form method="POST" action="{{ url_for('admin_calendar_bulk') }}">
+  <input type="hidden" name="year" value="{{ year }}">
+  <input type="hidden" name="month" value="{{ month }}">
+
+  <div class="cal-grid">
+    <!-- Header row -->
+    <div class="cal-header">Sun</div>
+    <div class="cal-header">Mon</div>
+    <div class="cal-header">Tue</div>
+    <div class="cal-header">Wed</div>
+    <div class="cal-header">Thu</div>
+    <div class="cal-header">Fri</div>
+    <div class="cal-header">Sat</div>
+
+    {% for week in weeks %}
+      {% for day in week %}
+        {% if day %}
+          <div class="cal-cell
+            {% if day.is_past %}past{% endif %}
+            {% if day.is_today %}today{% endif %}
+            {% if day.day_type == 'Weekend' %}type-weekend{% elif day.day_type == 'High Use' %}type-highuse{% else %}type-weekday{% endif %}
+          ">
+            <div class="date-num">{{ day.date.day }}</div>
+
+            <select name="type_{{ day.date.isoformat() }}" class="form-select form-select-sm">
               <option value="Weekday" {% if day.day_type == 'Weekday' %}selected{% endif %}>Weekday</option>
               <option value="Weekend" {% if day.day_type == 'Weekend' %}selected{% endif %}>Weekend</option>
               <option value="High Use" {% if day.day_type == 'High Use' %}selected{% endif %}>High Use</option>
             </select>
+
             <input type="number" name="cap_{{ day.date.isoformat() }}"
-                   value="{{ day.capacity }}"
-                   class="form-control form-control-sm mt-1"
-                   min="1" max="500" style="width:80px; margin:auto;">
-            <small class="text-muted">{{ day.used }} booked</small>
-          {% endif %}
-        </td>
-        {% endfor %}
-      </tr>
+                   value="{{ day.capacity }}" min="1" class="form-control form-control-sm"
+                   title="Capacity">
+
+            {% if day.used > 0 %}
+            <div class="usage-bar">
+              {% set pct = (day.used / day.capacity * 100) if day.capacity > 0 else 0 %}
+              <div class="fill" style="width:{{ [pct, 100]|min }}%;
+                background:{% if pct >= 90 %}#dc3545{% elif pct >= 70 %}#ffc107{% else %}#198754{% endif %};"></div>
+            </div>
+            <div class="usage-text">{{ day.used }}/{{ day.capacity }}</div>
+            {% endif %}
+          </div>
+        {% else %}
+          <div class="cal-cell empty"></div>
+        {% endif %}
       {% endfor %}
-    </tbody>
-  </table>
+    {% endfor %}
+  </div>
 
-  <button type="submit" class="btn btn-primary btn-lg mt-2">💾 Save All Changes for {{ month_name }}</button>
+  <div class="mt-3">
+    <button type="submit" class="btn btn-primary btn-lg">💾 Save All Changes</button>
+  </div>
 </form>
-
-<a href="{{ url_for('admin_dashboard') }}" class="btn btn-secondary mt-3">← Back to Dashboard</a>
 {% endblock %}
