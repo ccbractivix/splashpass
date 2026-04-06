@@ -259,6 +259,58 @@ def reserve():
         flash('You already have a reservation for this date.', 'warning')
         return redirect(url_for('book'))
 
+    # --- Store pending reservation in session; redirect to TOS ---
+    session['pending_reservation'] = {
+        'owner_number': owner_number,
+        'reservation_date': reservation_date_str,
+        'party_size': party_size
+    }
+    return redirect(url_for('terms'))
+
+@app.route('/terms', methods=['GET', 'POST'])
+def terms():
+    pending = session.get('pending_reservation')
+    if not pending:
+        flash('No pending reservation. Please start a new booking.', 'warning')
+        return redirect(url_for('book'))
+
+    member = Member.query.filter_by(owner_number=pending['owner_number'], active=True).first()
+    if not member:
+        session.pop('pending_reservation', None)
+        flash('Member not found.' + REPORT_LINK, 'danger')
+        return redirect(url_for('book'))
+
+    res_date = datetime.strptime(pending['reservation_date'], '%Y-%m-%d').date()
+    party_size = pending['party_size']
+
+    if request.method == 'GET':
+        return render_template('terms.html',
+                               member=member,
+                               reservation_date=res_date,
+                               party_size=party_size)
+
+    # POST — they agreed
+    if not request.form.get('agree'):
+        flash('You must agree to the terms of use to complete your reservation.', 'danger')
+        return render_template('terms.html',
+                               member=member,
+                               reservation_date=res_date,
+                               party_size=party_size)
+
+    # Re-validate availability (someone else may have booked in the meantime)
+    day_type, capacity = get_day_info(res_date)
+    used = get_capacity_used(res_date)
+    if used + party_size > capacity:
+        session.pop('pending_reservation', None)
+        flash('Sorry, availability changed while you were reviewing the terms. Please try again.' + REPORT_LINK, 'danger')
+        return redirect(url_for('book'))
+
+    existing = Reservation.query.filter_by(member_id=member.id, reservation_date=res_date).first()
+    if existing:
+        session.pop('pending_reservation', None)
+        flash('You already have a reservation for this date.', 'warning')
+        return redirect(url_for('book'))
+
     code = generate_code()
     reservation = Reservation(
         confirmation_code=code,
@@ -268,6 +320,8 @@ def reserve():
     )
     db.session.add(reservation)
     db.session.commit()
+
+    session.pop('pending_reservation', None)
 
     qr_data = make_qr_base64(code)
 
@@ -644,7 +698,7 @@ def admin_calendar():
         month = 1
         year += 1
 
-    cal = cal_module.Calendar(firstweekday=6)  # Sunday start
+    cal = cal_module.Calendar(firstweekday=6)
     month_dates = cal.monthdatescalendar(year, month)
 
     weeks = []
@@ -671,13 +725,11 @@ def admin_calendar():
     next_month = month + 1 if month < 12 else 1
     next_year = year if month < 12 else year + 1
 
-    # Check if last year same month has any DayType data
     last_year_count = DayType.query.filter(
         db.extract('year', DayType.date) == year - 1,
         db.extract('month', DayType.date) == month
     ).count()
 
-    # Also check previous month (for the second copy option)
     if month == 1:
         pm_month, pm_year = 12, year - 1
     else:
