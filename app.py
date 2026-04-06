@@ -10,6 +10,8 @@ from flask import (
 from flask_sqlalchemy import SQLAlchemy
 import pytz
 import qrcode
+import sendgrid
+from sendgrid.helpers.mail import Mail, Email, To, Content
 
 # ---------------------------------------------------------------------------
 # App config
@@ -112,6 +114,25 @@ def checkin_required(f):
             return redirect(url_for('checkin_login'))
         return f(*args, **kwargs)
     return decorated
+
+def send_problem_report_email(name, owner_number, contact, message):
+    sg = sendgrid.SendGridAPIClient(api_key=os.environ.get('SENDGRID_API_KEY'))
+    from_email = Email(os.environ.get('MAIL_FROM', 'noreply@ccbrsplashpass.com'))
+    to_email = To(os.environ.get('MAIL_RECIPIENT'))
+    subject = f"SplashPass Problem Report - Owner #{owner_number}"
+    body = f"""New Problem Report Submitted
+
+Name: {name}
+Owner Number: {owner_number}
+Contact: {contact}
+
+Message:
+{message}
+"""
+    content = Content("text/plain", body)
+    mail = Mail(from_email, to_email, subject, content)
+    response = sg.client.mail.send.post(request_body=mail.get())
+    return response.status_code
 
 # ---------------------------------------------------------------------------
 # Public routes
@@ -580,6 +601,29 @@ def upload_members():
         flash(f'Error: {str(e)}', 'danger')
 
     return redirect(url_for('admin_members'))
+
+@app.route('/report', methods=['GET'])
+def report_form():
+    return render_template('report.html')
+
+@app.route('/report', methods=['POST'])
+def report_submit():
+    name = request.form.get('name', '').strip()
+    owner_number = request.form.get('owner_number', '').strip()
+    contact = request.form.get('contact', '').strip()
+    message = request.form.get('message', '').strip()
+
+    if not name or not owner_number or not contact or not message:
+        flash('Please fill out all fields.', 'danger')
+        return redirect(url_for('report_form'))
+
+    try:
+        send_problem_report_email(name, owner_number, contact, message)
+        flash('Your report has been submitted. We will be in touch soon.', 'success')
+    except Exception as e:
+        flash('There was a problem sending your report. Please try again later.', 'danger')
+
+    return redirect(url_for('report_form'))
 
 # ---------------------------------------------------------------------------
 # Admin calendar
