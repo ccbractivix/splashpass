@@ -1,51 +1,51 @@
-{% extends 'base.html' %}
-{% block title %}Look Up Reservation{% endblock %}
+{% extends "base.html" %}
+{% block title %}My Reservations{% endblock %}
 {% block content %}
-<div class="card">
-    <h2>Look Up Your Reservations</h2>
+<h2>My Reservations</h2>
 
-    <form method="POST">
-        <label for="owner_number">Owner Number</label>
-        <input type="text" id="owner_number" name="owner_number" placeholder="e.g. 6204848" required>
-        <button type="submit" class="btn btn-primary">Look Up</button>
-    </form>
+{% if not member %}
+  <form method="POST" style="max-width:400px;">
+    <div class="mb-3">
+      <label class="form-label">Owner Number</label>
+      <input type="text" name="owner_number" class="form-control" required autofocus>
+    </div>
+    <button type="submit" class="btn btn-primary">Look Up</button>
+  </form>
+{% else %}
+  <div class="card mb-3" style="max-width:500px;">
+    <div class="card-body">
+      <h5>{{ member.first_name }} {{ member.last_name }}</h5>
+      <p class="mb-1">Owner #: {{ member.owner_number }}</p>
+      <p class="mb-0">Membership: <span class="badge bg-info">{{ member.membership }}</span></p>
+    </div>
+  </div>
 
-    {% if member %}
-        <hr style="margin: 1.5rem 0;">
-        <p><strong>{{ member.first_name }} {{ member.last_name }}</strong> —
-           <span class="badge badge-{{ member.membership|lower }}">{{ member.membership }}</span>
-        </p>
+  {% if reservations %}
+    <h4>Upcoming Reservations</h4>
+    {% for r in reservations %}
+      <div class="card mb-3" style="max-width:500px;">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-start">
+            <div>
+              <h5>{{ r.reservation_date.strftime('%A, %B %-d, %Y') }}</h5>
+              <p class="mb-1">Confirmation: <code style="font-size:1.1em;">{{ r.confirmation_code }}</code></p>
+              <p class="mb-0">Party Size: {{ r.party_size }}</p>
+            </div>
+            <div class="text-end">
+              {% if r.arrived %}
+                <span class="badge bg-success fs-6">✓ Checked In</span>
+              {% else %}
+                <span class="badge bg-secondary fs-6">Not Yet Arrived</span>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+    {% endfor %}
+  {% else %}
+    <div class="alert alert-info">No upcoming reservations found.</div>
+  {% endif %}
 
-        {% if reservations %}
-            <table>
-                <thead>
-                    <tr>
-                        <th>Date</th>
-                        <th>Party Size</th>
-                        <th>Confirmation</th>
-                        <th>Status</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for r in reservations %}
-                    <tr>
-                        <td>{{ r.reservation_date.strftime('%A, %B %d, %Y') }}</td>
-                        <td>{{ r.party_size }}</td>
-                        <td><strong>{{ r.confirmation_code }}</strong></td>
-                        <td>
-                            {% if r.arrived %}
-                                <span class="badge badge-arrived">Arrived</span>
-                            {% else %}
-                                <span class="badge badge-pending">Upcoming</span>
-                            {% endif %}
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        {% else %}
-            <p class="mt-1">No upcoming reservations found.</p>
-        {% endif %}
-    {% endif %}
-</div>
+  <a href="/lookup" class="btn btn-secondary mt-2">← Start Over</a>
+{% endif %}
 {% endblock %}
