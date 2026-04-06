@@ -1,0 +1,40 @@
+{% extends 'base.html' %}
+{% block title %}Manage Members{% endblock %}
+{% block content %}
+<div class="card">
+    <h2>Upload Members</h2>
+    <form method="POST" action="{{ url_for('upload_members') }}" enctype="multipart/form-data">
+        <label for="file">CSV or TSV file (OwnerNumber, LastName, FirstName, Membership)</label>
+        <input type="file" id="file" name="file" accept=".csv,.tsv,.txt" required>
+        <button type="submit" class="btn btn-primary">Upload</button>
+    </form>
+</div>
+
+<div class="card">
+    <h2>Members ({{ members|length }})</h2>
+    {% if members %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Owner #</th>
+                    <th>Last Name</th>
+                    <th>First Name</th>
+                    <th>Membership</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for m in members %}
+                <tr>
+                    <td>{{ m.owner_number }}</td>
+                    <td>{{ m.last_name }}</td>
+                    <td>{{ m.first_name }}</td>
+                    <td><span class="badge badge-{{ m.membership|lower }}">{{ m.membership }}</span></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p>No members loaded yet.</p>
+    {% endif %}
+</div>
+{% endblock %}
