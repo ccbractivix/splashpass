@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}Terms of Use — SplashPass{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+
+        <div class="card shadow">
+            <div class="card-header bg-primary text-white">
+                <h4 class="mb-0"><i class="bi bi-clipboard-check"></i> Terms of Use</h4>
+            </div>
+            <div class="card-body">
+
+                <div class="alert alert-info mb-3">
+                    <strong>{{ member.first_name }} {{ member.last_name }}</strong> —
+                    {{ reservation_date.strftime('%A, %B %-d, %Y') }} — Party of {{ party_size }}
+                </div>
+
+                <p>Please review and accept the following before confirming your reservation.</p>
+
+                <div class="border rounded p-3 mb-4 bg-light" style="max-height:400px; overflow-y:auto; font-size:0.93rem;">
+
+                    <h6 class="fw-bold">Hours &amp; Check-In</h6>
+                    <ul>
+                        <li>Property and amenity access is <strong>8:00 AM – 10:00 PM</strong> daily. All persons must exit the pool deck by 10:00 PM.</li>
+                        <li>Stop by the front desk upon arrival to receive your <strong>day bands and key card</strong>.</li>
+                        <li>You will be asked to present <strong>photo identification</strong> at check-in.</li>
+                    </ul>
+
+                    <h6 class="fw-bold">Wristbands</h6>
+                    <ul>
+                        <li>Pool use is exclusively for resort guests and Splash Pass holders. <strong>All guests must wear wristbands</strong> issued at check-in at all times while on property.</li>
+                        <li>Wristbands will be verified before entering the pool deck.</li>
+                    </ul>
+
+                    <h6 class="fw-bold">Reservations &amp; Re-Entry</h6>
+                    <ul>
+                        <li><strong>Reservations are not guaranteed.</strong> Exiting the pool area does not hold your place — you may be required to join the standby queue for re-entry.</li>
+                    </ul>
+
+                    <h6 class="fw-bold">Pool Rules</h6>
+                    <ul>
+                        <li>All pool rules are posted on signboards around the pool deck and are <strong>strictly enforced</strong>.</li>
+                        <li><strong>No outside food or beverages</strong> are permitted on the pool deck. Carrying in outside food, drink, or alcoholic beverages will result in <strong>loss of privileges</strong>.</li>
+                        <li>Only soft-sided coolers no larger than <strong>7 quarts (six-pack size)</strong> are admitted. A complimentary small cooler for baby milk/formula or necessary medical supplies is available upon request.</li>
+                        <li>All bags entering the pool deck are <strong>subject to inspection</strong>.</li>
+                        <li><strong>Smoking and vaping are prohibited</strong> on the pool deck. Violations may result in loss of privileges.</li>
+                    </ul>
+
+                    <h6 class="fw-bold">Waterslide Height Requirement</h6>
+                    <ul>
+                        <li>Beginning <strong>Thursday, July 10, 2025</strong>, all waterslide riders must be at least <strong>48 inches (122 cm)</strong> tall.</li>
+                    </ul>
+
+                    <h6 class="fw-bold">Towels</h6>
+                    <ul>
+                        <li>The resort <strong>does not provide pool towels</strong> for Splash Pass guests. Please bring your own.</li>
+                    </ul>
+                </div>
+
+                <form method="POST" action="{{ url_for('terms') }}">
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" id="agree" name="agree" value="1">
+                        <label class="form-check-label fw-bold" for="agree">
+                            I have read and agree to the Terms of Use.
+                        </label>
+                    </div>
+
+                    <div class="d-grid gap-2 d-md-flex">
+                        <button type="submit" class="btn btn-success btn-lg" id="confirmBtn" disabled>
+                            <i class="bi bi-check-circle"></i> Confirm Reservation
+                        </button>
+                        <a href="{{ url_for('book') }}" class="btn btn-outline-secondary btn-lg">
+                            <i class="bi bi-arrow-left"></i> Cancel
+                        </a>
+                    </div>
+                </form>
+
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<script>
+    document.getElementById('agree').addEventListener('change', function() {
+        document.getElementById('confirmBtn').disabled = !this.checked;
+    });
+</script>
+{% endblock %}
