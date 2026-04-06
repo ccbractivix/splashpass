@@ -1,0 +1,73 @@
+{% extends 'base.html' %}
+{% block title %}Admin Dashboard{% endblock %}
+{% block content %}
+<div class="card">
+    <h2>Dashboard — {{ view_date.strftime('%A, %B %d, %Y') }}</h2>
+    <p>
+        Day Type: <strong>{{ day_type }}</strong> |
+        Capacity: <strong>{{ used }}/{{ capacity }}</strong> |
+        <a href="{{ url_for('admin_export', date=view_date.isoformat()) }}" class="btn btn-sm btn-secondary">Export CSV</a>
+    </p>
+
+    <form method="GET" style="margin-top:1rem; display:flex; gap:0.5rem; align-items:end;">
+        <div>
+            <label for="date">View Date</label>
+            <input type="date" id="date" name="date" value="{{ view_date.isoformat() }}">
+        </div>
+        <button type="submit" class="btn btn-primary btn-sm">Go</button>
+    </form>
+
+    {% if reservations %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Confirmation</th>
+                    <th>Name</th>
+                    <th>Owner #</th>
+                    <th>Tier</th>
+                    <th>Party</th>
+                    <th>Arrived</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in reservations %}
+                <tr>
+                    <td><strong>{{ r.confirmation_code }}</strong></td>
+                    <td>{{ r.member.last_name }}, {{ r.member.first_name }}</td>
+                    <td>{{ r.member.owner_number }}</td>
+                    <td><span class="badge badge-{{ r.member.membership|lower }}">{{ r.member.membership }}</span></td>
+                    <td>{{ r.party_size }}</td>
+                    <td>
+                        {% if r.arrived %}
+                            <span class="badge badge-arrived">Yes</span>
+                        {% else %}
+                            <span class="badge badge-pending">No</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <form method="POST" action="{{ url_for('toggle_arrival', res_id=r.id) }}" style="display:inline;">
+                            <button type="submit" class="btn btn-sm {% if r.arrived %}btn-secondary{% else %}btn-success{% endif %}">
+                                {% if r.arrived %}Undo{% else %}Check In{% endif %}
+                            </button>
+                        </form>
+                        <form method="POST" action="{{ url_for('delete_reservation', res_id=r.id) }}" style="display:inline;"
+                              onsubmit="return confirm('Delete this reservation?');">
+                            <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p class="mt-1">No reservations for this date.</p>
+    {% endif %}
+</div>
+
+<div class="card">
+    <h3>Quick Links</h3>
+    <a href="{{ url_for('admin_members') }}" class="btn btn-primary btn-sm">Members</a>
+    <a href="{{ url_for('admin_calendar') }}" class="btn btn-primary btn-sm" style="margin-left:0.5rem;">Calendar</a>
+</div>
+{% endblock %}
