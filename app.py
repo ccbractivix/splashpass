@@ -113,15 +113,6 @@ def checkin_required(f):
         return f(*args, **kwargs)
     return decorated
 
-def get_week_of_month(d):
-    """Return 0-based week index within the month (by calendar row)."""
-    cal = cal_module.Calendar(firstweekday=6)
-    weeks = cal.monthdatescalendar(d.year, d.month)
-    for i, week in enumerate(weeks):
-        if d in week:
-            return i
-    return 0
-
 # ---------------------------------------------------------------------------
 # Public routes
 # ---------------------------------------------------------------------------
@@ -286,7 +277,7 @@ def lookup():
     return render_template('lookup.html', member=member, reservations=reservations)
 
 # ---------------------------------------------------------------------------
-# Check-in routes (front desk only)
+# Check-in routes
 # ---------------------------------------------------------------------------
 @app.route('/checkin/login', methods=['GET', 'POST'])
 def checkin_login():
@@ -591,7 +582,7 @@ def upload_members():
     return redirect(url_for('admin_members'))
 
 # ---------------------------------------------------------------------------
-# Admin calendar — visual month grid with color coding
+# Admin calendar
 # ---------------------------------------------------------------------------
 @app.route('/admin/calendar')
 @admin_required
@@ -634,10 +625,20 @@ def admin_calendar():
     next_month = month + 1 if month < 12 else 1
     next_year = year if month < 12 else year + 1
 
-    # Check if last year's same month has data for copy button
+    # Check if last year same month has any DayType data
     last_year_count = DayType.query.filter(
         db.extract('year', DayType.date) == year - 1,
         db.extract('month', DayType.date) == month
+    ).count()
+
+    # Also check previous month (for the second copy option)
+    if month == 1:
+        pm_month, pm_year = 12, year - 1
+    else:
+        pm_month, pm_year = month - 1, year
+    prev_month_count = DayType.query.filter(
+        db.extract('year', DayType.date) == pm_year,
+        db.extract('month', DayType.date) == pm_month
     ).count()
 
     return render_template('admin/calendar.html',
@@ -650,13 +651,18 @@ def admin_calendar():
                            prev_month=prev_month,
                            next_year=next_year,
                            next_month=next_month,
-                           last_year_has_data=last_year_count > 0)
+                           last_year_has_data=last_year_count > 0,
+                           prev_month_has_data=prev_month_count > 0,
+                           pm_month=pm_month,
+                           pm_year=pm_year)
 
-@app.route('/admin/calendar/copy-last-year', methods=['POST'])
+@app.route('/admin/calendar/copy-previous-year', methods=['POST'])
 @admin_required
-def admin_calendar_copy_last_year():
-    """Copy day types from same month last year, matching by week-of-month
-    and day-of-week (not by exact date)."""
+def admin_calendar_copy_previous_year():
+    """Copy day types from the SAME MONTH in the PREVIOUS YEAR.
+    Matches by week-of-month position + day-of-week so that e.g.
+    the 2nd-week Friday/Saturday/Sunday keep their types even though
+    the actual dates shift year to year."""
     year = request.form.get('year', type=int)
     month = request.form.get('month', type=int)
 
@@ -664,34 +670,33 @@ def admin_calendar_copy_last_year():
         flash('Invalid month/year.', 'danger')
         return redirect(url_for('admin_calendar'))
 
-    last_year = year - 1
+    source_year = year - 1
 
-    # Build last year's calendar grid (Sunday-start)
-    cal = cal_module.Calendar(firstweekday=6)
+    cal = cal_module.Calendar(firstweekday=6)  # Sunday-start
 
-    # Last year's month: build map of (week_index, weekday) -> day_type
-    ly_weeks = cal.monthdatescalendar(last_year, month)
-    ly_map = {}  # (week_idx, weekday) -> day_type
-    for wi, week in enumerate(ly_weeks):
+    # Build source map: (week_index, weekday) -> day_type
+    source_weeks = cal.monthdatescalendar(source_year, month)
+    source_map = {}  # (week_idx, weekday) -> day_type
+    for wi, week in enumerate(source_weeks):
         for d in week:
             if d.month == month:
                 dt = DayType.query.filter_by(date=d).first()
                 if dt:
-                    ly_map[(wi, d.weekday())] = dt.day_type
+                    source_map[(wi, d.weekday())] = dt.day_type
 
-    if not ly_map:
-        flash(f'No calendar data found for {date(last_year, month, 1).strftime("%B %Y")}.', 'warning')
+    if not source_map:
+        flash(f'No calendar data found for {date(source_year, month, 1).strftime("%B %Y")}.', 'warning')
         return redirect(url_for('admin_calendar', year=year, month=month))
 
-    # This year's month: apply matching positions
-    ty_weeks = cal.monthdatescalendar(year, month)
+    # Apply to target year at matching positions
+    target_weeks = cal.monthdatescalendar(year, month)
     applied = 0
-    for wi, week in enumerate(ty_weeks):
+    for wi, week in enumerate(target_weeks):
         for d in week:
             if d.month == month:
                 key = (wi, d.weekday())
-                if key in ly_map:
-                    day_type = ly_map[key]
+                if key in source_map:
+                    day_type = source_map[key]
                     existing = DayType.query.filter_by(date=d).first()
                     if existing:
                         existing.day_type = day_type
@@ -700,14 +705,15 @@ def admin_calendar_copy_last_year():
                     applied += 1
 
     db.session.commit()
-    flash(f'Copied {applied} day types from {date(last_year, month, 1).strftime("%B %Y")} by week position.', 'success')
+    flash(f'Copied {applied} day types from {date(source_year, month, 1).strftime("%B %Y")} → '
+          f'{date(year, month, 1).strftime("%B %Y")} (matched by week position & day of week).', 'success')
     return redirect(url_for('admin_calendar', year=year, month=month))
 
-@app.route('/admin/calendar/copy-last-month', methods=['POST'])
+@app.route('/admin/calendar/copy-previous-month', methods=['POST'])
 @admin_required
-def admin_calendar_copy_last_month():
-    """Copy day types from previous month, matching by week-of-month
-    and day-of-week."""
+def admin_calendar_copy_previous_month():
+    """Copy day types from the PREVIOUS MONTH (same or prior year).
+    Matches by week-of-month position + day-of-week."""
     year = request.form.get('year', type=int)
     month = request.form.get('month', type=int)
 
@@ -716,37 +722,33 @@ def admin_calendar_copy_last_month():
         return redirect(url_for('admin_calendar'))
 
     if month == 1:
-        prev_month = 12
-        prev_year = year - 1
+        src_month, src_year = 12, year - 1
     else:
-        prev_month = month - 1
-        prev_year = year
+        src_month, src_year = month - 1, year
 
     cal = cal_module.Calendar(firstweekday=6)
 
-    # Previous month grid
-    pm_weeks = cal.monthdatescalendar(prev_year, prev_month)
-    pm_map = {}
-    for wi, week in enumerate(pm_weeks):
+    source_weeks = cal.monthdatescalendar(src_year, src_month)
+    source_map = {}
+    for wi, week in enumerate(source_weeks):
         for d in week:
-            if d.month == prev_month:
+            if d.month == src_month:
                 dt = DayType.query.filter_by(date=d).first()
                 if dt:
-                    pm_map[(wi, d.weekday())] = dt.day_type
+                    source_map[(wi, d.weekday())] = dt.day_type
 
-    if not pm_map:
-        flash(f'No calendar data found for {date(prev_year, prev_month, 1).strftime("%B %Y")}.', 'warning')
+    if not source_map:
+        flash(f'No calendar data found for {date(src_year, src_month, 1).strftime("%B %Y")}.', 'warning')
         return redirect(url_for('admin_calendar', year=year, month=month))
 
-    # This month grid
-    ty_weeks = cal.monthdatescalendar(year, month)
+    target_weeks = cal.monthdatescalendar(year, month)
     applied = 0
-    for wi, week in enumerate(ty_weeks):
+    for wi, week in enumerate(target_weeks):
         for d in week:
             if d.month == month:
                 key = (wi, d.weekday())
-                if key in pm_map:
-                    day_type = pm_map[key]
+                if key in source_map:
+                    day_type = source_map[key]
                     existing = DayType.query.filter_by(date=d).first()
                     if existing:
                         existing.day_type = day_type
@@ -755,7 +757,8 @@ def admin_calendar_copy_last_month():
                     applied += 1
 
     db.session.commit()
-    flash(f'Copied {applied} day types from {date(prev_year, prev_month, 1).strftime("%B %Y")} by week position.', 'success')
+    flash(f'Copied {applied} day types from {date(src_year, src_month, 1).strftime("%B %Y")} → '
+          f'{date(year, month, 1).strftime("%B %Y")} (matched by week position & day of week).', 'success')
     return redirect(url_for('admin_calendar', year=year, month=month))
 
 @app.route('/admin/calendar/bulk', methods=['POST'])
@@ -849,7 +852,7 @@ def delete_reservation(res_id):
     return redirect(url_for('admin_dashboard', date=res_date.isoformat()))
 
 # ---------------------------------------------------------------------------
-# Admin usage report — date range
+# Admin usage report
 # ---------------------------------------------------------------------------
 @app.route('/admin/report')
 @admin_required
