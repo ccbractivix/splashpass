@@ -1,0 +1,51 @@
+{% extends 'base.html' %}
+{% block title %}Look Up Reservation{% endblock %}
+{% block content %}
+<div class="card">
+    <h2>Look Up Your Reservations</h2>
+
+    <form method="POST">
+        <label for="owner_number">Owner Number</label>
+        <input type="text" id="owner_number" name="owner_number" placeholder="e.g. 6204848" required>
+        <button type="submit" class="btn btn-primary">Look Up</button>
+    </form>
+
+    {% if member %}
+        <hr style="margin: 1.5rem 0;">
+        <p><strong>{{ member.first_name }} {{ member.last_name }}</strong> —
+           <span class="badge badge-{{ member.membership|lower }}">{{ member.membership }}</span>
+        </p>
+
+        {% if reservations %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Party Size</th>
+                        <th>Confirmation</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for r in reservations %}
+                    <tr>
+                        <td>{{ r.reservation_date.strftime('%A, %B %d, %Y') }}</td>
+                        <td>{{ r.party_size }}</td>
+                        <td><strong>{{ r.confirmation_code }}</strong></td>
+                        <td>
+                            {% if r.arrived %}
+                                <span class="badge badge-arrived">Arrived</span>
+                            {% else %}
+                                <span class="badge badge-pending">Upcoming</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <p class="mt-1">No upcoming reservations found.</p>
+        {% endif %}
+    {% endif %}
+</div>
+{% endblock %}
