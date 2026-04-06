@@ -57,7 +57,6 @@
     color: #666;
     margin-top: 1px;
   }
-  /* Color coding by day type */
   .type-weekday { border-left: 4px solid #0d6efd; }
   .type-weekend { border-left: 4px solid #198754; }
   .type-highuse { border-left: 4px solid #dc3545; }
@@ -104,24 +103,30 @@
 <!-- Copy buttons -->
 <div class="d-flex flex-wrap gap-2 mb-3">
   {% if last_year_has_data %}
-  <form method="POST" action="{{ url_for('admin_calendar_copy_last_year') }}"
-        onsubmit="return confirm('Copy day types from {{ year - 1 }} {{ month_name.split()[0] }}? This matches by week position and day of week, not exact dates. Existing entries will be overwritten.')">
+  <form method="POST" action="{{ url_for('admin_calendar_copy_previous_year') }}"
+        onsubmit="return confirm('Copy day types from {{ month_name.split()[0] }} {{ year - 1 }} → {{ month_name }}?\n\nThis matches by week position and day of week (not exact dates).\nFor example, if the 2nd week Fri-Sun were High Use in {{ year - 1 }}, the 2nd week Fri-Sun in {{ year }} will also become High Use.\n\nExisting entries for {{ month_name }} will be overwritten.')">
     <input type="hidden" name="year" value="{{ year }}">
     <input type="hidden" name="month" value="{{ month }}">
     <button type="submit" class="btn btn-outline-warning">
-      📋 Copy from {{ month_name.split()[0] }} {{ year - 1 }} (by week position)
+      📋 Copy from {{ month_name.split()[0] }} {{ year - 1 }}
     </button>
   </form>
+  {% else %}
+  <button class="btn btn-outline-secondary" disabled>
+    No data for {{ month_name.split()[0] }} {{ year - 1 }}
+  </button>
   {% endif %}
 
-  <form method="POST" action="{{ url_for('admin_calendar_copy_last_month') }}"
-        onsubmit="return confirm('Copy day types from last month? This matches by week position and day of week. Existing entries will be overwritten.')">
+  {% if prev_month_has_data %}
+  <form method="POST" action="{{ url_for('admin_calendar_copy_previous_month') }}"
+        onsubmit="return confirm('Copy day types from {{ '{:02d}'.format(pm_month) }}/{{ pm_year }} → {{ month_name }}?\n\nThis matches by week position and day of week.\nExisting entries will be overwritten.')">
     <input type="hidden" name="year" value="{{ year }}">
     <input type="hidden" name="month" value="{{ month }}">
     <button type="submit" class="btn btn-outline-secondary">
-      📋 Copy from Previous Month (by week position)
+      📋 Copy from Previous Month
     </button>
   </form>
+  {% endif %}
 </div>
 
 <!-- Calendar grid form -->
