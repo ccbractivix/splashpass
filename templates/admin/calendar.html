@@ -1,33 +1,19 @@
 {% extends "base.html" %}
 {% block title %}Calendar Editor{% endblock %}
 {% block content %}
-<h2>Calendar Editor</h2>
+<h2>Calendar Editor — {{ month_name }}</h2>
 
-<form method="GET" class="mb-3">
-  <label>Month:
-    <select name="month" onchange="this.form.submit()">
-      {% for m in range(1,13) %}
-      <option value="{{ m }}" {% if m == month %}selected{% endif %}>
-        {{ datetime(2025, m, 1).strftime('%B') }}
-      </option>
-      {% endfor %}
-    </select>
-  </label>
-  <label class="ms-2">Year:
-    <select name="year" onchange="this.form.submit()">
-      {% for y in range(2025, 2028) %}
-      <option value="{{ y }}" {% if y == year %}selected{% endif %}>{{ y }}</option>
-      {% endfor %}
-    </select>
-  </label>
-</form>
+<div class="d-flex justify-content-between mb-3" style="max-width:900px;">
+  <a href="{{ url_for('admin_calendar', year=prev_year, month=prev_month) }}" class="btn btn-outline-secondary">← Previous</a>
+  <a href="{{ url_for('admin_calendar', year=next_year, month=next_month) }}" class="btn btn-outline-secondary">Next →</a>
+</div>
 
-<form method="POST" action="/admin/calendar/bulk">
+<form method="POST" action="{{ url_for('admin_calendar_bulk') }}">
   <input type="hidden" name="month" value="{{ month }}">
   <input type="hidden" name="year" value="{{ year }}">
 
   <table class="table table-bordered text-center" style="max-width:900px;">
-    <thead>
+    <thead class="table-dark">
       <tr>
         <th>Sun</th><th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th><th>Fri</th><th>Sat</th>
       </tr>
@@ -36,7 +22,8 @@
       {% for week in weeks %}
       <tr>
         {% for day in week %}
-        <td style="vertical-align:top; padding:6px; min-width:110px; {% if day and day.date == today %}background:#fff3cd;{% endif %}">
+        <td style="vertical-align:top; padding:6px; min-width:110px; height:120px;
+          {% if day and day.date == today %}background:#fff3cd;{% elif day and day.day_type == 'High Use' %}background:#f8d7da;{% elif day and day.day_type == 'Weekend' %}background:#d1ecf1;{% endif %}">
           {% if day %}
             <strong>{{ day.date.day }}</strong><br>
             <select name="type_{{ day.date.isoformat() }}" class="form-select form-select-sm mt-1">
@@ -44,10 +31,11 @@
               <option value="Weekend" {% if day.day_type == 'Weekend' %}selected{% endif %}>Weekend</option>
               <option value="High Use" {% if day.day_type == 'High Use' %}selected{% endif %}>High Use</option>
             </select>
-            <input type="number" name="cap_{{ day.date.isoformat() }}" 
-                   value="{{ day.capacity }}" 
-                   class="form-control form-control-sm mt-1" 
-                   min="0" max="500" style="width:80px; margin:auto;">
+            <input type="number" name="cap_{{ day.date.isoformat() }}"
+                   value="{{ day.capacity }}"
+                   class="form-control form-control-sm mt-1"
+                   min="1" max="500" style="width:80px; margin:auto;">
+            <small class="text-muted">{{ day.used }} booked</small>
           {% endif %}
         </td>
         {% endfor %}
@@ -56,8 +44,8 @@
     </tbody>
   </table>
 
-  <button type="submit" class="btn btn-primary btn-lg mt-2">💾 Save All Changes for {{ datetime(2025, month, 1).strftime('%B') }} {{ year }}</button>
+  <button type="submit" class="btn btn-primary btn-lg mt-2">💾 Save All Changes for {{ month_name }}</button>
 </form>
 
-<a href="/admin/dashboard" class="btn btn-secondary mt-3">← Back to Dashboard</a>
+<a href="{{ url_for('admin_dashboard') }}" class="btn btn-secondary mt-3">← Back to Dashboard</a>
 {% endblock %}
