@@ -5,3 +5,4 @@ psycopg2-binary==2.9.10
 pytz==2025.1
 qrcode==8.0
 Pillow==11.2.1
+sendgrid
