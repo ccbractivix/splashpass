@@ -148,12 +148,12 @@ def book():
 
     owner_number = request.form.get('owner_number', '').strip()
     if not owner_number:
-        flash('Please enter your Owner Number.', 'danger')
+        flash('Member number not found. Please check your number and try again. <a href="/report" class="alert-link">Report a Problem</a>', 'danger')
         return render_template('book.html')
 
     member = Member.query.filter_by(owner_number=owner_number, active=True).first()
     if not member:
-        flash('Owner Number not found or membership inactive.', 'danger')
+        flash('Member number not found. Please check your number and try again. <a href="/report" class="alert-link">Report a Problem</a>', 'danger')
         return render_template('book.html')
 
     today = today_eastern()
@@ -166,7 +166,7 @@ def book():
     elif tier == 'Silver':
         max_date = today
     else:
-        flash('Unknown membership tier.', 'danger')
+        flash('Member number not found. Please check your number and try again. <a href="/report" class="alert-link">Report a Problem</a>', 'danger')
         return render_template('book.html')
 
     available_dates = []
@@ -202,13 +202,13 @@ def reserve():
 
     member = Member.query.filter_by(owner_number=owner_number, active=True).first()
     if not member:
-        flash('Member not found.', 'danger')
+        flash('Member number not found. Please check your number and try again. <a href="/report" class="alert-link">Report a Problem</a>', 'danger')
         return redirect(url_for('book'))
 
     try:
         res_date = datetime.strptime(reservation_date_str, '%Y-%m-%d').date()
     except ValueError:
-        flash('Invalid date.', 'danger')
+        flash('Member number not found. Please check your number and try again. <a href="/report" class="alert-link">Report a Problem</a>', 'danger')
         return redirect(url_for('book'))
 
     try:
