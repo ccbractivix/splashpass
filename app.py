@@ -469,6 +469,7 @@ def upload_members():
 
     try:
         raw = file.read()
+        # Strip BOM
         if raw[:3] == b'\xef\xbb\xbf':
             raw = raw[3:]
         content = raw.decode('utf-8')
@@ -478,27 +479,76 @@ def upload_members():
 
         reader = csv.DictReader(io.StringIO(content), delimiter=delimiter)
 
+        # Build normalized header map: normalized_key -> original_key
+        raw_headers = reader.fieldnames or []
+        header_map = {}
+        for h in raw_headers:
+            if h is None:
+                continue
+            normalized = h.strip().lower().replace(' ', '_').replace('-', '_')
+            header_map[normalized] = h
+
+        # Flexible column finder
+        def find_col(candidates):
+            for c in candidates:
+                if c in header_map:
+                    return header_map[c]
+            return None
+
+        owner_col = find_col([
+            'owner_number', 'ownernumber', 'owner_no', 'owner_#',
+            'owner#', 'owner', 'owner_num', 'ownernum'
+        ])
+        first_col = find_col([
+            'first_name', 'firstname', 'first'
+        ])
+        last_col = find_col([
+            'last_name', 'lastname', 'last'
+        ])
+        mem_col = find_col([
+            'membership', 'membership_level', 'membershiplevel',
+            'membership_type', 'membershiptype', 'level', 'tier',
+            'type', 'member_level', 'member_type', 'pass_type',
+            'passtype', 'pass', 'pass_level', 'passlevel'
+        ])
+
+        if not owner_col:
+            flash(f'Could not find owner number column. Headers found: {raw_headers}', 'danger')
+            return redirect(url_for('admin_members'))
+        if not first_col or not last_col:
+            flash(f'Could not find name columns. Headers found: {raw_headers}', 'danger')
+            return redirect(url_for('admin_members'))
+
         count = 0
         skipped = 0
+        no_tier = 0
 
         for row in reader:
-            clean = {}
-            for key, val in row.items():
-                if key is None:
-                    continue
-                clean[key.strip().lower().replace(' ', '_')] = (val.strip() if val else '')
+            owner_number = (row.get(owner_col) or '').strip()
+            first_name = (row.get(first_col) or '').strip()
+            last_name = (row.get(last_col) or '').strip()
 
-            owner_number = clean.get('ownernumber', clean.get('owner_number', ''))
-            last_name = clean.get('lastname', clean.get('last_name', ''))
-            first_name = clean.get('firstname', clean.get('first_name', ''))
-            membership = clean.get('membership', '').strip().title()
-
-            if membership not in ('Platinum', 'Gold', 'Silver'):
+            if not owner_number or not first_name:
                 skipped += 1
                 continue
-            if not owner_number:
-                skipped += 1
-                continue
+
+            # Parse membership with fuzzy matching
+            raw_mem = (row.get(mem_col) or '').strip() if mem_col else ''
+            membership = None
+            raw_lower = raw_mem.lower()
+
+            if 'plat' in raw_lower:
+                membership = 'Platinum'
+            elif 'gold' in raw_lower:
+                membership = 'Gold'
+            elif 'silv' in raw_lower:
+                membership = 'Silver'
+            elif raw_mem.title() in ('Platinum', 'Gold', 'Silver'):
+                membership = raw_mem.title()
+
+            if not membership:
+                membership = 'Silver'
+                no_tier += 1
 
             existing = Member.query.filter_by(owner_number=owner_number).first()
             if existing:
@@ -518,7 +568,18 @@ def upload_members():
             count += 1
 
         db.session.commit()
-        flash(f'Loaded {count} members. Skipped {skipped}.', 'success')
+
+        msg = f'Loaded {count} members.'
+        if skipped:
+            msg += f' Skipped {skipped} rows (missing data).'
+        if mem_col:
+            msg += f' Membership column: "{mem_col}".'
+        else:
+            msg += ' ⚠️ No membership column found — all set to Silver.'
+        if no_tier and mem_col:
+            msg += f' {no_tier} rows had unrecognized tier (defaulted to Silver).'
+
+        flash(msg, 'success')
     except Exception as e:
         db.session.rollback()
         flash(f'Error: {str(e)}', 'danger')
