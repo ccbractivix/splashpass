@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}{{ year }} Full Year Calendar{% endblock %}
+{% block content %}
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <a href="{{ url_for('calendar_full', year=year-1) }}" class="btn btn-outline-secondary">
+            <i class="bi bi-chevron-left"></i> {{ year - 1 }}
+        </a>
+        <h2 class="mb-0">{{ year }} Calendar</h2>
+        <a href="{{ url_for('calendar_full', year=year+1) }}" class="btn btn-outline-secondary">
+            {{ year + 1 }} <i class="bi bi-chevron-right"></i>
+        </a>
+    </div>
+
+    <div class="row">
+        {% for m in months %}
+        <div class="col-lg-4 col-md-6 mb-4">
+            <h5 class="text-center">{{ m.month_name }}</h5>
+            <table class="table table-bordered table-sm text-center cal-table-sm">
+                <thead>
+                    <tr class="table-dark">
+                        <th>S</th><th>M</th><th>T</th><th>W</th><th>T</th><th>F</th><th>S</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for week in m.weeks %}
+                    <tr>
+                        {% for day in week %}
+                        <td class="cal-day-sm {% if day == 0 %}cal-empty{% elif day in m.high_use_days %}cal-high{% endif %} {% if day == today.day and m.month == today.month and year == today.year %}cal-today{% endif %}">
+                            {% if day != 0 %}{{ day }}{% endif %}
+                        </td>
+                        {% endfor %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endfor %}
+    </div>
+
+    <div class="d-flex justify-content-between align-items-center mt-2">
+        <div>
+            <span class="badge cal-high-badge me-1">&nbsp;&nbsp;&nbsp;</span> High Use Day
+        </div>
+        <a href="{{ url_for('calendar_view') }}">Back to Monthly View</a>
+    </div>
+</div>
+
+<style>
+    .cal-table-sm { table-layout: fixed; font-size: 0.85rem; }
+    .cal-day-sm {
+        height: 32px;
+        vertical-align: middle;
+        font-weight: 500;
+    }
+    .cal-empty { background: #fff; }
+    .cal-high { background: rgb(227, 108, 34); color: #fff; font-weight: 700; }
+    .cal-today { border: 2px solid rgb(218, 165, 32) !important; }
+    .cal-high-badge { background: rgb(227, 108, 34); display: inline-block; border-radius: 4px; }
+</style>
+{% endblock %}
