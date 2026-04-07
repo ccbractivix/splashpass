@@ -88,12 +88,14 @@
         </td>
         <td>
           <form method="POST" action="{{ url_for('toggle_arrival', res_id=r.id) }}" class="d-inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
             <button type="submit" class="btn btn-sm {{ 'btn-outline-danger' if r.arrived else 'btn-outline-success' }}">
               {{ 'Undo' if r.arrived else 'Check In' }}
             </button>
           </form>
           <form method="POST" action="{{ url_for('delete_reservation', res_id=r.id) }}"
                 class="d-inline" onsubmit="return confirm('Delete this reservation?')">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
             <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
           </form>
         </td>
