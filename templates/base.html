@@ -16,8 +16,7 @@
         <a class="nav-link text-white" href="/book">Book</a>
         <a class="nav-link text-white" href="/lookup">Reservations</a>
         {% if calendar_exists %}
-        <a class="nav-link text-white" href="{{ url_for('public_calendar') }}">
-          <i class="bi bi-calendar-event"></i> Calendar
+        <a class="nav-link" href="{{ url_for('calendar_view') }}">Calendar</a>
         </a>
         {% endif %}
       </div>
