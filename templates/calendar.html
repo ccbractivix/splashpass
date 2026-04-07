@@ -1,25 +1,58 @@
 {% extends "base.html" %}
-{% block title %}{{ year }} Pool Calendar{% endblock %}
+{% block title %}Calendar – {{ month_name }} {{ year }}{% endblock %}
 {% block content %}
-<div class="text-center">
-    <h2 class="mb-3">{{ year }} Pool Calendar</h2>
-    <p class="text-muted">High Use days shown in orange</p>
-
-    {% if web_exists %}
-    <div class="mb-3">
-        <img src="{{ url_for('static', filename='calendars/' ~ year ~ '_web.png') }}"
-             alt="{{ year }} Pool Calendar"
-             class="img-fluid rounded shadow"
-             style="max-width: 100%; border: 1px solid #ddd;">
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <a href="{{ url_for('calendar_view', year=prev_year, month=prev_month) }}" class="btn btn-outline-secondary">
+            <i class="bi bi-chevron-left"></i> Prev
+        </a>
+        <h2 class="mb-0">{{ month_name }} {{ year }}</h2>
+        <a href="{{ url_for('calendar_view', year=next_year, month=next_month) }}" class="btn btn-outline-secondary">
+            Next <i class="bi bi-chevron-right"></i>
+        </a>
     </div>
-    {% endif %}
 
-    {% if full_exists %}
-    <a href="{{ url_for('static', filename='calendars/' ~ year ~ '_full.png') }}"
-       download="HIC_Pool_Calendar_{{ year }}.png"
-       class="btn btn-primary">
-        <i class="bi bi-download"></i> Download Full Resolution
-    </a>
-    {% endif %}
+    <table class="table table-bordered text-center cal-table">
+        <thead>
+            <tr class="table-dark">
+                <th>Sun</th><th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th><th>Fri</th><th>Sat</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for week in weeks %}
+            <tr>
+                {% for day in week %}
+                <td class="cal-day {% if day == 0 %}cal-empty{% elif day in high_use_days %}cal-high{% endif %} {% if day == today.day and month == today.month and year == today.year %}cal-today{% endif %}">
+                    {% if day != 0 %}{{ day }}{% endif %}
+                </td>
+                {% endfor %}
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <div class="d-flex justify-content-between align-items-center">
+        <div>
+            <span class="badge cal-high-badge me-1">&nbsp;&nbsp;&nbsp;</span> High Use Day
+        </div>
+        <a href="{{ url_for('calendar_full', year=year) }}">View Full Year <i class="bi bi-arrow-right"></i></a>
+    </div>
 </div>
+
+<style>
+    .cal-table { table-layout: fixed; }
+    .cal-day {
+        height: 60px;
+        vertical-align: middle;
+        font-size: 1.1rem;
+        font-weight: 500;
+    }
+    .cal-empty { background: #fff; }
+    .cal-high { background: rgb(227, 108, 34); color: #fff; font-weight: 700; }
+    .cal-today { border: 3px solid rgb(218, 165, 32) !important; }
+    .cal-high-badge { background: rgb(227, 108, 34); display: inline-block; border-radius: 4px; }
+    @media (max-width: 576px) {
+        .cal-day { height: 44px; font-size: 0.9rem; }
+    }
+</style>
 {% endblock %}
