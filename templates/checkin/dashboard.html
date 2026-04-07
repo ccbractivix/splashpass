@@ -43,6 +43,7 @@
 
 <!-- Search -->
 <form method="POST" action="{{ url_for('checkin_search') }}" class="mb-4" style="max-width:500px;">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <div class="input-group">
     <input type="text" name="query" class="form-control form-control-lg"
            placeholder="Scan QR / enter confirmation code or owner #" autofocus>
@@ -82,6 +83,7 @@
         </td>
         <td>
           <form method="POST" action="{{ url_for('checkin_toggle', res_id=r.id) }}" style="display:inline;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="source" value="dashboard">
             <button type="submit" class="btn btn-sm {{ 'btn-outline-danger' if r.arrived else 'btn-success' }}">
               {{ 'Undo' if r.arrived else 'Check In' }}
