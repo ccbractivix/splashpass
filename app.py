@@ -1,17 +1,20 @@
 import os, io, csv, base64, string, random, calendar as cal_module
 from datetime import datetime, timedelta, date
 from functools import wraps
-from collections import OrderedDict
 
 from flask import (
     Flask, render_template, request, redirect, url_for,
     flash, session, Response
 )
 from flask_sqlalchemy import SQLAlchemy
+from flask_wtf.csrf import CSRFProtect
 import pytz
 import qrcode
 import sendgrid
-from sendgrid.helpers.mail import Mail, Email, To, Content
+from sendgrid.helpers.mail import (
+    Mail, Email, To, Content, Attachment, FileContent,
+    FileName, FileType, Disposition
+)
 
 # ---------------------------------------------------------------------------
 # App config
@@ -32,6 +35,7 @@ DEFAULT_CAPACITY = 128
 EASTERN = pytz.timezone('US/Eastern')
 
 db = SQLAlchemy(app)
+csrf = CSRFProtect(app)
 
 # ---------------------------------------------------------------------------
 # Models
@@ -47,6 +51,7 @@ class Member(db.Model):
     last_name = db.Column(db.String(100), nullable=False)
     first_name = db.Column(db.String(100), nullable=False)
     membership = db.Column(db.String(20), nullable=False)
+    email = db.Column(db.String(200), nullable=True)
     active = db.Column(db.Boolean, default=True)
     reservations = db.relationship('Reservation', backref='member', lazy=True)
 
@@ -136,6 +141,96 @@ Message:
     response = sg.client.mail.send.post(request_body=mail.get())
     return response.status_code
 
+def send_confirmation_email(member, reservation, qr_base64):
+    """Send reservation confirmation with QR code to member's email."""
+    if not member.email:
+        return None
+
+    api_key = os.environ.get('SENDGRID_API_KEY')
+    if not api_key:
+        return None
+
+    sg = sendgrid.SendGridAPIClient(api_key=api_key)
+    from_email = Email(os.environ.get('MAIL_FROM', 'noreply@ccbrsplashpass.com'))
+    to_email = To(member.email)
+
+    subject = f"SplashPass Confirmation — {reservation.reservation_date.strftime('%A, %B %-d, %Y')}"
+
+    html_body = f"""
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="background-color: #0d6efd; color: white; padding: 20px; text-align: center;">
+            <h1 style="margin: 0;">🏊 SplashPass</h1>
+            <p style="margin: 5px 0 0;">Reservation Confirmed</p>
+        </div>
+
+        <div style="padding: 20px; border: 1px solid #dee2e6; border-top: none;">
+            <p>Hi <strong>{member.first_name}</strong>,</p>
+            <p>Your reservation has been confirmed! Here are the details:</p>
+
+            <table style="width: 100%; border-collapse: collapse; margin: 15px 0;">
+                <tr>
+                    <td style="padding: 8px; border: 1px solid #dee2e6; font-weight: bold; background: #f8f9fa; width: 40%;">Confirmation Code</td>
+                    <td style="padding: 8px; border: 1px solid #dee2e6; font-size: 18px; font-weight: bold; letter-spacing: 2px;">{reservation.confirmation_code}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 8px; border: 1px solid #dee2e6; font-weight: bold; background: #f8f9fa;">Date</td>
+                    <td style="padding: 8px; border: 1px solid #dee2e6;">{reservation.reservation_date.strftime('%A, %B %-d, %Y')}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 8px; border: 1px solid #dee2e6; font-weight: bold; background: #f8f9fa;">Party Size</td>
+                    <td style="padding: 8px; border: 1px solid #dee2e6;">{reservation.party_size}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 8px; border: 1px solid #dee2e6; font-weight: bold; background: #f8f9fa;">Member</td>
+                    <td style="padding: 8px; border: 1px solid #dee2e6;">{member.first_name} {member.last_name} (#{member.owner_number})</td>
+                </tr>
+            </table>
+
+            <div style="text-align: center; margin: 20px 0;">
+                <p style="margin-bottom: 10px; font-weight: bold;">Show this QR code at check-in:</p>
+                <img src="cid:qrcode" alt="QR Code" style="width: 200px; height: 200px;">
+            </div>
+
+            <div style="background: #fff3cd; border: 1px solid #ffc107; border-radius: 5px; padding: 15px; margin: 15px 0;">
+                <strong>Reminders:</strong>
+                <ul style="margin: 5px 0; padding-left: 20px;">
+                    <li>Access hours: 8:00 AM – 10:00 PM</li>
+                    <li>Bring photo ID for check-in</li>
+                    <li>Bring your own towels</li>
+                    <li>No outside food or beverages on pool deck</li>
+                </ul>
+            </div>
+
+            <p style="color: #6c757d; font-size: 12px; margin-top: 20px;">
+                You can view your reservations anytime at
+                <a href="https://ccbrsplashpass.com/lookup">ccbrsplashpass.com/lookup</a>.
+                If you need help, use our <a href="https://ccbrsplashpass.com/report">Report a Problem</a> form.
+            </p>
+        </div>
+    </div>
+    """
+
+    mail = Mail()
+    mail.from_email = from_email
+    mail.to = [to_email]
+    mail.subject = subject
+    mail.content = [Content("text/html", html_body)]
+
+    # Attach QR code as inline image
+    attachment = Attachment()
+    attachment.file_content = FileContent(qr_base64)
+    attachment.file_name = FileName("qrcode.png")
+    attachment.file_type = FileType("image/png")
+    attachment.disposition = Disposition("inline")
+    attachment.content_id = "qrcode"
+    mail.attachment = [attachment]
+
+    try:
+        response = sg.client.mail.send.post(request_body=mail.get())
+        return response.status_code
+    except Exception:
+        return None
+
 # ---------------------------------------------------------------------------
 # Public routes
 # ---------------------------------------------------------------------------
@@ -184,6 +279,11 @@ def book():
         used = get_capacity_used(d)
         remaining = capacity - used
         if remaining > 0:
+            # Check if member already has reservation for this date
+            existing = Reservation.query.filter_by(
+                member_id=member.id, reservation_date=d).first()
+            if existing:
+                continue
             available_dates.append({
                 'date': d,
                 'day_type': day_type,
@@ -254,9 +354,12 @@ def reserve():
         flash('Sorry, not enough availability for that date and party size.' + REPORT_LINK, 'danger')
         return redirect(url_for('book'))
 
+    # Duplicate reservation guard
     existing = Reservation.query.filter_by(member_id=member.id, reservation_date=res_date).first()
     if existing:
-        flash('You already have a reservation for this date.', 'warning')
+        flash(f'You already have a reservation for {res_date.strftime("%A, %B %-d, %Y")} '
+              f'(Confirmation: {existing.confirmation_code}). '
+              f'Only one reservation per date is allowed.', 'warning')
         return redirect(url_for('book'))
 
     # --- Store pending reservation in session; redirect to TOS ---
@@ -271,17 +374,27 @@ def reserve():
 def terms():
     pending = session.get('pending_reservation')
     if not pending:
-        flash('No pending reservation. Please start a new booking.', 'warning')
+        flash('Your session has expired. Please start a new booking.', 'warning')
         return redirect(url_for('book'))
 
     member = Member.query.filter_by(owner_number=pending['owner_number'], active=True).first()
     if not member:
         session.pop('pending_reservation', None)
-        flash('Member not found.' + REPORT_LINK, 'danger')
+        flash('Member not found. Please start a new booking.' + REPORT_LINK, 'danger')
         return redirect(url_for('book'))
 
-    res_date = datetime.strptime(pending['reservation_date'], '%Y-%m-%d').date()
-    party_size = pending['party_size']
+    try:
+        res_date = datetime.strptime(pending['reservation_date'], '%Y-%m-%d').date()
+    except (ValueError, KeyError):
+        session.pop('pending_reservation', None)
+        flash('Invalid reservation data. Please start a new booking.', 'danger')
+        return redirect(url_for('book'))
+
+    party_size = pending.get('party_size')
+    if not party_size or not isinstance(party_size, int) or party_size < 1 or party_size > 6:
+        session.pop('pending_reservation', None)
+        flash('Invalid reservation data. Please start a new booking.', 'danger')
+        return redirect(url_for('book'))
 
     if request.method == 'GET':
         return render_template('terms.html',
@@ -297,7 +410,7 @@ def terms():
                                reservation_date=res_date,
                                party_size=party_size)
 
-    # Re-validate availability (someone else may have booked in the meantime)
+    # Re-validate availability
     day_type, capacity = get_day_info(res_date)
     used = get_capacity_used(res_date)
     if used + party_size > capacity:
@@ -305,11 +418,27 @@ def terms():
         flash('Sorry, availability changed while you were reviewing the terms. Please try again.' + REPORT_LINK, 'danger')
         return redirect(url_for('book'))
 
+    # Re-check duplicate
     existing = Reservation.query.filter_by(member_id=member.id, reservation_date=res_date).first()
     if existing:
         session.pop('pending_reservation', None)
-        flash('You already have a reservation for this date.', 'warning')
+        flash(f'You already have a reservation for {res_date.strftime("%A, %B %-d, %Y")} '
+              f'(Confirmation: {existing.confirmation_code}).', 'warning')
         return redirect(url_for('book'))
+
+    # Re-validate date is still within booking window
+    today = today_eastern()
+    tier = member.membership
+    if tier == 'Platinum':
+        if res_date < today or res_date > today + timedelta(days=6):
+            session.pop('pending_reservation', None)
+            flash('This date is no longer within your booking window. Please start over.', 'danger')
+            return redirect(url_for('book'))
+    elif tier in ('Gold', 'Silver'):
+        if res_date != today:
+            session.pop('pending_reservation', None)
+            flash('This date is no longer available for same-day booking. Please start over.', 'danger')
+            return redirect(url_for('book'))
 
     code = generate_code()
     reservation = Reservation(
@@ -324,6 +453,14 @@ def terms():
     session.pop('pending_reservation', None)
 
     qr_data = make_qr_base64(code)
+
+    # Send confirmation email
+    email_status = send_confirmation_email(member, reservation, qr_data)
+    if email_status and 200 <= email_status < 300:
+        flash('Confirmation email sent!', 'success')
+    elif member.email:
+        flash('Reservation confirmed but we could not send the confirmation email. '
+              'Please save your confirmation code.', 'warning')
 
     return render_template('confirmation.html',
                            reservation=reservation,
@@ -584,6 +721,9 @@ def upload_members():
             'type', 'member_level', 'member_type', 'pass_type',
             'passtype', 'pass', 'pass_level', 'passlevel'
         ])
+        email_col = find_col([
+            'email', 'email_address', 'emailaddress', 'e_mail'
+        ])
 
         if not owner_col:
             flash(f'Could not find owner number column. Headers found: {raw_headers}', 'danger')
@@ -622,18 +762,23 @@ def upload_members():
                 membership = 'Silver'
                 no_tier += 1
 
+            email = (row.get(email_col) or '').strip() if email_col else ''
+
             existing = Member.query.filter_by(owner_number=owner_number).first()
             if existing:
                 existing.last_name = last_name
                 existing.first_name = first_name
                 existing.membership = membership
                 existing.active = True
+                if email:
+                    existing.email = email
             else:
                 m = Member(
                     owner_number=owner_number,
                     last_name=last_name,
                     first_name=first_name,
                     membership=membership,
+                    email=email if email else None,
                     active=True
                 )
                 db.session.add(m)
@@ -650,6 +795,8 @@ def upload_members():
             msg += ' ⚠️ No membership column found — all set to Silver.'
         if no_tier and mem_col:
             msg += f' {no_tier} rows had unrecognized tier (defaulted to Silver).'
+        if email_col:
+            msg += f' Email column: "{email_col}".'
 
         flash(msg, 'success')
     except Exception as e:
@@ -676,7 +823,7 @@ def report_submit():
     try:
         send_problem_report_email(name, owner_number, contact, message)
         flash('Your report has been submitted. We will be in touch soon.', 'success')
-    except Exception as e:
+    except Exception:
         flash('There was a problem sending your report. Please try again later.', 'danger')
 
     return redirect(url_for('report_form'))
