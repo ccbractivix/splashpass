@@ -30,6 +30,11 @@
       </div>
     </div>
   </nav>
+  {% set cal_year = now().year if now is defined else 2025 %}
+{% if calendar_exists %}
+<li><a class="dropdown-item" href="{{ url_for('public_calendar') }}">{{ cal_year }} High Use Calendar</a></li>
+{% endif %}
+
   <div class="container mt-4">
     {% with messages = get_flashed_messages(with_categories=true) %}
       {% if messages %}
