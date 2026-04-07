@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}{{ year }} Pool Calendar{% endblock %}
+{% block content %}
+<div class="text-center">
+    <h2 class="mb-3">{{ year }} Pool Calendar</h2>
+    <p class="text-muted">High Use days shown in orange</p>
+
+    {% if web_exists %}
+    <div class="mb-3">
+        <img src="{{ url_for('static', filename='calendars/' ~ year ~ '_web.png') }}"
+             alt="{{ year }} Pool Calendar"
+             class="img-fluid rounded shadow"
+             style="max-width: 100%; border: 1px solid #ddd;">
+    </div>
+    {% endif %}
+
+    {% if full_exists %}
+    <a href="{{ url_for('static', filename='calendars/' ~ year ~ '_full.png') }}"
+       download="HIC_Pool_Calendar_{{ year }}.png"
+       class="btn btn-primary">
+        <i class="bi bi-download"></i> Download Full Resolution
+    </a>
+    {% endif %}
+</div>
+{% endblock %}
