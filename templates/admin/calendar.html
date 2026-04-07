@@ -1,4 +1,22 @@
 {% extends "base.html" %}
+<div class="card mb-4">
+    <div class="card-body">
+        <h5 class="card-title">Printable Calendar</h5>
+        <form method="POST" action="{{ url_for('admin_generate_calendar', year=current_year) }}" class="d-inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-warning">
+                <i class="bi bi-image"></i> Generate {{ current_year }} Calendar PNG
+            </button>
+        </form>
+        {% set full_path = 'calendars/' ~ current_year ~ '_full.png' %}
+        {% if full_calendar_exists %}
+        <a href="{{ url_for('admin_download_calendar', year=current_year) }}" class="btn btn-outline-primary ms-2">
+            <i class="bi bi-download"></i> Download Full Resolution
+        </a>
+        {% endif %}
+    </div>
+</div>
+
 {% block title %}Calendar Manager{% endblock %}
 {% block content %}
 <style>
