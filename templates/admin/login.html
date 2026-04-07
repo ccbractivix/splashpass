@@ -4,9 +4,12 @@
 <div class="card" style="max-width:400px; margin:4rem auto;">
     <h2 class="text-center">Admin Login</h2>
     <form method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
         <label for="password">Password</label>
         <input type="password" id="password" name="password" required>
         <button type="submit" class="btn btn-primary" style="width:100%;">Login</button>
     </form>
 </div>
 {% endblock %}
+
+You'll want to check `checkin/login.html`, `book.html`, `terms.html`, and `lookup.html` too — every `<form method="POST">` needs that hidden input. Want me to see any of those?
