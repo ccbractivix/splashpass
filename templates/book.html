@@ -1,54 +1,74 @@
 {% extends "base.html" %}
 {% block title %}Book a Reservation{% endblock %}
 {% block content %}
-<h2>Book a Reservation</h2>
+<h2 class="mb-4">Book a Reservation</h2>
 
 {% if not member %}
-  <form method="POST" style="max-width:400px;">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <div class="mb-3">
-      <label class="form-label">Owner Number</label>
-      <input type="text" name="owner_number" class="form-control" required autofocus>
-    </div>
-    <button type="submit" class="btn btn-primary">Find My Account</button>
-  </form>
-{% else %}
-  <div class="card mb-3" style="max-width:500px;">
-    <div class="card-body">
-      <h5>{{ member.first_name }} {{ member.last_name }}</h5>
-      <p class="mb-1">Owner #: {{ member.owner_number }}</p>
-      <p class="mb-0">Membership: <span class="badge bg-info">{{ member.membership }}</span></p>
-    </div>
+<div class="card shadow-sm">
+  <div class="card-body">
+    <h5 class="card-title">Step 1: Verify Your Account</h5>
+    <form method="POST">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="mb-3">
+        <label for="owner_number" class="form-label">Owner Number</label>
+        <input type="text" class="form-control" id="owner_number" name="owner_number" required>
+      </div>
+      <div class="mb-3">
+        <label for="last_name" class="form-label">Last Name on Account</label>
+        <input type="text" class="form-control" id="last_name" name="last_name" required>
+      </div>
+      <button type="submit" class="btn btn-primary">Continue</button>
+    </form>
   </div>
+</div>
 
-  {% if available_dates %}
-    <form method="POST" action="/reserve" style="max-width:500px;">
+{% else %}
+<div class="alert alert-info">
+  Welcome, <strong>{{ member.first_name }} {{ member.last_name }}</strong>
+  — {{ member.membership }} Member
+</div>
+
+{% if available_dates %}
+<div class="card shadow-sm">
+  <div class="card-body">
+    <h5 class="card-title">Step 2: Select a Date</h5>
+    <form method="POST" action="{{ url_for('reserve') }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="hidden" name="owner_number" value="{{ member.owner_number }}">
-      <div class="mb-3">
-        <label class="form-label">Select Date</label>
-        <select name="reservation_date" class="form-select" required>
-          {% for d in available_dates %}
-            <option value="{{ d.date.isoformat() }}">
-              {{ d.date.strftime('%A, %B %-d, %Y') }} — {{ d.day_type }}
-            </option>
-          {% endfor %}
-        </select>
-      </div>
-      <div class="mb-3">
-        <label class="form-label">Party Size (max 6)</label>
-        <select name="party_size" class="form-select" required>
-          {% for i in range(1, 7) %}
-            <option value="{{ i }}">{{ i }}</option>
-          {% endfor %}
-        </select>
-      </div>
-      <button type="submit" class="btn btn-success">Confirm Reservation</button>
-    </form>
-  {% else %}
-    <div class="alert alert-warning">No dates available for your membership level.</div>
-  {% endif %}
 
-  <a href="/book" class="btn btn-secondary mt-3">← Start Over</a>
+      <div class="mb-3">
+        <label for="reservation_date" class="form-label">Date</label>
+        <select class="form-select" id="reservation_date" name="reservation_date" required>
+          <option value="">-- Select a date --</option>
+          {% for d in available_dates %}
+          <option value="{{ d.date.isoformat() }}">
+            {{ d.date.strftime('%A, %B %-d, %Y') }}
+            — {{ d.day_type }}
+            ({{ d.remaining }} spots left)
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="mb-3">
+        <label for="party_size" class="form-label">Party Size (max 6)</label>
+        <select class="form-select" id="party_size" name="party_size" required>
+          {% for i in range(1, 7) %}
+          <option value="{{ i }}">{{ i }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <button type="submit" class="btn btn-success">Reserve</button>
+      <a href="{{ url_for('book') }}" class="btn btn-secondary ms-2">Start Over</a>
+    </form>
+  </div>
+</div>
+{% else %}
+<div class="alert alert-warning">
+  No dates are currently available for your membership tier.
+</div>
+<a href="{{ url_for('book') }}" class="btn btn-secondary">Start Over</a>
+{% endif %}
 {% endif %}
 {% endblock %}
