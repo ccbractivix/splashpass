@@ -436,13 +436,19 @@ def book():
         return render_template('book.html')
 
     owner_number = request.form.get('owner_number', '').strip()
-    if not owner_number:
-        flash('Member number not found. Please check your number and try again.' + REPORT_LINK, 'danger')
+    last_name = request.form.get('last_name', '').strip()
+
+    if not owner_number or not last_name:
+        flash('Please enter both your Owner Number and Last Name.' + REPORT_LINK, 'danger')
         return render_template('book.html')
 
     member = Member.query.filter_by(owner_number=owner_number, active=True).first()
     if not member:
-        flash('Member number not found. Please check your number and try again.' + REPORT_LINK, 'danger')
+        flash('Account not found. Please check your Owner Number and Last Name and try again.' + REPORT_LINK, 'danger')
+        return render_template('book.html')
+
+    if member.last_name.strip().lower() != last_name.lower():
+        flash('Account not found. Please check your Owner Number and Last Name and try again.' + REPORT_LINK, 'danger')
         return render_template('book.html')
 
     today = today_eastern()
@@ -657,13 +663,19 @@ def lookup():
         return render_template('lookup.html')
 
     owner_number = request.form.get('owner_number', '').strip()
-    if not owner_number:
-        flash('Please enter your Owner Number.', 'danger')
+    last_name = request.form.get('last_name', '').strip()
+
+    if not owner_number or not last_name:
+        flash('Please enter both your Owner Number and Last Name.', 'danger')
         return render_template('lookup.html')
 
     member = Member.query.filter_by(owner_number=owner_number, active=True).first()
     if not member:
-        flash('Owner Number not found.', 'danger')
+        flash('Account not found. Please check your Owner Number and Last Name and try again.' + REPORT_LINK, 'danger')
+        return render_template('lookup.html')
+
+    if member.last_name.strip().lower() != last_name.lower():
+        flash('Account not found. Please check your Owner Number and Last Name and try again.' + REPORT_LINK, 'danger')
         return render_template('lookup.html')
 
     today = today_eastern()
@@ -938,7 +950,8 @@ def upload_members():
             'membership', 'membership_level', 'membershiplevel',
             'membership_type', 'membershiptype', 'level', 'tier',
             'type', 'member_level', 'member_type', 'pass_type',
-            'passtype', 'pass', 'pass_level', 'passlevel'
+            'passtype', 'pass', 'pass_level', 'passlevel',
+            'enrollment_type', 'enrollmenttype', 'enrollment'
         ])
         email_col = find_col([
             'email', 'email_address', 'emailaddress', 'e_mail'
@@ -1433,7 +1446,7 @@ def admin_report_export():
 # ---------------------------------------------------------------------------
 with app.app_context():
     db.create_all()
-    
+
     with db.engine.connect() as conn:
         migrations = [
             "ALTER TABLE member ADD COLUMN IF NOT EXISTS email VARCHAR(200)",
