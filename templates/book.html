@@ -5,6 +5,7 @@
 
 {% if not member %}
   <form method="POST" style="max-width:400px;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <div class="mb-3">
       <label class="form-label">Owner Number</label>
       <input type="text" name="owner_number" class="form-control" required autofocus>
@@ -22,6 +23,7 @@
 
   {% if available_dates %}
     <form method="POST" action="/reserve" style="max-width:500px;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="hidden" name="owner_number" value="{{ member.owner_number }}">
       <div class="mb-3">
         <label class="form-label">Select Date</label>
