@@ -21,6 +21,7 @@
       Values: Platinum, Gold, Silver (partial matches like "Plat" work). Missing defaults to Silver.
     </p>
     <form action="{{ url_for('upload_members') }}" method="POST" enctype="multipart/form-data">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
       <div class="input-group">
         <input type="file" name="file" accept=".csv,.tsv,.txt" class="form-control" required>
         <button type="submit" class="btn btn-primary">Upload</button>
