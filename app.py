@@ -1433,6 +1433,19 @@ def admin_report_export():
 # ---------------------------------------------------------------------------
 with app.app_context():
     db.create_all()
+    
+    with db.engine.connect() as conn:
+        migrations = [
+            "ALTER TABLE member ADD COLUMN IF NOT EXISTS email VARCHAR(200)",
+            "ALTER TABLE reservation ADD COLUMN IF NOT EXISTS arrived BOOLEAN DEFAULT FALSE",
+        ]
+        for sql in migrations:
+            try:
+                conn.execute(db.text(sql))
+            except Exception:
+                pass
+        conn.commit()
+
 
 if __name__ == '__main__':
     app.run(debug=True)
