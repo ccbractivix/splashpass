@@ -4,10 +4,9 @@ from functools import wraps
 
 from flask import (
     Flask, render_template, request, redirect, url_for,
-    flash, session, Response
+    flash, session, Response, send_file
 )
 from flask_sqlalchemy import SQLAlchemy
-from flask import send_file
 from flask_wtf.csrf import CSRFProtect
 import pytz
 import qrcode
@@ -15,9 +14,9 @@ import sendgrid
 from sendgrid.helpers.mail import (
     Mail, Email, To, Content, Attachment, FileContent,
     FileName, FileType, Disposition
+)
 from PIL import Image, ImageDraw, ImageFont
 import calendar as pycalendar
-)
 
 # ---------------------------------------------------------------------------
 # App config
@@ -236,7 +235,6 @@ def send_confirmation_email(member, reservation, qr_base64):
 
 def generate_calendar_png(year):
     """Generate printable and web calendar PNGs for a given year."""
-    import os
 
     # --- Configuration ---
     FULL_W, FULL_H = 3000, 2000
@@ -258,7 +256,7 @@ def generate_calendar_png(year):
     high_dates = set()
     days = DayType.query.filter(
         db.extract('year', DayType.date) == year,
-        DayType.day_type == 'high'
+        DayType.day_type == 'High Use'
     ).all()
     for d in days:
         high_dates.add(d.date)
@@ -267,7 +265,7 @@ def generate_calendar_png(year):
     img = Image.new('RGB', (FULL_W, FULL_H), WHITE)
     draw = ImageDraw.Draw(img)
 
-    # --- Fonts (use default; Pillow's built-in) ---
+    # --- Fonts ---
     try:
         font_title = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 48)
         font_month = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 28)
@@ -351,8 +349,8 @@ def generate_calendar_png(year):
         day_row_h = remaining_h / 6  # max 6 week rows
 
         # Get calendar for this month (Sunday start)
-        cal = pycalendar.Calendar(firstweekday=6)  # Sunday
-        weeks = cal.monthdayscalendar(year, month_num)
+        pcal = pycalendar.Calendar(firstweekday=6)  # Sunday
+        weeks = pcal.monthdayscalendar(year, month_num)
 
         for wi, week in enumerate(weeks):
             for di, day in enumerate(week):
@@ -360,12 +358,10 @@ def generate_calendar_png(year):
                 dy = day_grid_y + wi * day_row_h
 
                 if day == 0:
-                    # Empty cell
                     draw.rectangle([dx, dy, dx + day_col_w, dy + day_row_h],
                                    fill=WHITE, outline=BORDER_COLOR, width=1)
                 else:
-                    from datetime import date as date_type
-                    current_date = date_type(year, month_num, day)
+                    current_date = date(year, month_num, day)
                     is_high = current_date in high_dates
 
                     bg = HIC_ORANGE if is_high else LIGHT_GRAY
@@ -412,6 +408,20 @@ def generate_calendar_png(year):
 
     return full_path, web_path
 
+# ---------------------------------------------------------------------------
+# Context processor — injects calendar flags into all templates
+# ---------------------------------------------------------------------------
+@app.context_processor
+def inject_calendar_flag():
+    now = datetime.now(EASTERN)
+    year = now.year
+    web_path = os.path.join('static', 'calendars', f'{year}_web.png')
+    full_path = os.path.join('static', 'calendars', f'{year}_full.png')
+    return dict(
+        calendar_exists=os.path.exists(web_path),
+        full_calendar_exists=os.path.exists(full_path),
+        current_year=year
+    )
 
 # ---------------------------------------------------------------------------
 # Public routes
@@ -461,7 +471,6 @@ def book():
         used = get_capacity_used(d)
         remaining = capacity - used
         if remaining > 0:
-            # Check if member already has reservation for this date
             existing = Reservation.query.filter_by(
                 member_id=member.id, reservation_date=d).first()
             if existing:
@@ -536,7 +545,6 @@ def reserve():
         flash('Sorry, not enough availability for that date and party size.' + REPORT_LINK, 'danger')
         return redirect(url_for('book'))
 
-    # Duplicate reservation guard
     existing = Reservation.query.filter_by(member_id=member.id, reservation_date=res_date).first()
     if existing:
         flash(f'You already have a reservation for {res_date.strftime("%A, %B %-d, %Y")} '
@@ -544,7 +552,6 @@ def reserve():
               f'Only one reservation per date is allowed.', 'warning')
         return redirect(url_for('book'))
 
-    # --- Store pending reservation in session; redirect to TOS ---
     session['pending_reservation'] = {
         'owner_number': owner_number,
         'reservation_date': reservation_date_str,
@@ -584,7 +591,6 @@ def terms():
                                reservation_date=res_date,
                                party_size=party_size)
 
-    # POST — they agreed
     if not request.form.get('agree'):
         flash('You must agree to the terms of use to complete your reservation.', 'danger')
         return render_template('terms.html',
@@ -592,7 +598,6 @@ def terms():
                                reservation_date=res_date,
                                party_size=party_size)
 
-    # Re-validate availability
     day_type, capacity = get_day_info(res_date)
     used = get_capacity_used(res_date)
     if used + party_size > capacity:
@@ -600,7 +605,6 @@ def terms():
         flash('Sorry, availability changed while you were reviewing the terms. Please try again.' + REPORT_LINK, 'danger')
         return redirect(url_for('book'))
 
-    # Re-check duplicate
     existing = Reservation.query.filter_by(member_id=member.id, reservation_date=res_date).first()
     if existing:
         session.pop('pending_reservation', None)
@@ -608,7 +612,6 @@ def terms():
               f'(Confirmation: {existing.confirmation_code}).', 'warning')
         return redirect(url_for('book'))
 
-    # Re-validate date is still within booking window
     today = today_eastern()
     tier = member.membership
     if tier == 'Platinum':
@@ -636,7 +639,6 @@ def terms():
 
     qr_data = make_qr_base64(code)
 
-    # Send confirmation email
     email_status = send_confirmation_email(member, reservation, qr_data)
     if email_status and 200 <= email_status < 300:
         flash('Confirmation email sent!', 'success')
@@ -672,30 +674,32 @@ def lookup():
 
     return render_template('lookup.html', member=member, reservations=reservations)
 
-@app.route('/admin/calendar/generate/<int:year>', methods=['POST'])
-def admin_generate_calendar(year):
-    if 'admin' not in session:
-        return redirect(url_for('admin_login'))
-    try:
-        full_path, web_path = generate_calendar_png(year)
-        flash(f'Calendar generated for {year}.', 'success')
-    except Exception as e:
-        flash(f'Error generating calendar: {e}', 'danger')
-    return redirect(url_for('admin_calendar'))
+@app.route('/report', methods=['GET'])
+def report_form():
+    return render_template('report.html')
 
-@app.route('/admin/calendar/download/<int:year>')
-def admin_download_calendar(year):
-    if 'admin' not in session:
-        return redirect(url_for('admin_login'))
-    path = os.path.join('static', 'calendars', f'{year}_full.png')
-    if os.path.exists(path):
-        return send_file(path, as_attachment=True, download_name=f'HIC_Pool_Calendar_{year}.png')
-    flash('Calendar not found.', 'danger')
-    return redirect(url_for('admin_calendar'))
+@app.route('/report', methods=['POST'])
+def report_submit():
+    name = request.form.get('name', '').strip()
+    owner_number = request.form.get('owner_number', '').strip()
+    contact = request.form.get('contact', '').strip()
+    message = request.form.get('message', '').strip()
+
+    if not name or not owner_number or not contact or not message:
+        flash('Please fill out all fields.', 'danger')
+        return redirect(url_for('report_form'))
+
+    try:
+        send_problem_report_email(name, owner_number, contact, message)
+        flash('Your report has been submitted. We will be in touch soon.', 'success')
+    except Exception:
+        flash('There was a problem sending your report. Please try again later.', 'danger')
+
+    return redirect(url_for('report_form'))
 
 @app.route('/calendar')
 def public_calendar():
-    now = datetime.now(eastern)
+    now = datetime.now(EASTERN)
     year = now.year
     web_path = os.path.join('static', 'calendars', f'{year}_web.png')
     full_path = os.path.join('static', 'calendars', f'{year}_full.png')
@@ -704,7 +708,6 @@ def public_calendar():
     return render_template('calendar.html', year=year,
                            web_exists=os.path.exists(web_path),
                            full_exists=os.path.exists(full_path))
-
 
 # ---------------------------------------------------------------------------
 # Check-in routes
@@ -1021,29 +1024,6 @@ def upload_members():
 
     return redirect(url_for('admin_members'))
 
-@app.route('/report', methods=['GET'])
-def report_form():
-    return render_template('report.html')
-
-@app.route('/report', methods=['POST'])
-def report_submit():
-    name = request.form.get('name', '').strip()
-    owner_number = request.form.get('owner_number', '').strip()
-    contact = request.form.get('contact', '').strip()
-    message = request.form.get('message', '').strip()
-
-    if not name or not owner_number or not contact or not message:
-        flash('Please fill out all fields.', 'danger')
-        return redirect(url_for('report_form'))
-
-    try:
-        send_problem_report_email(name, owner_number, contact, message)
-        flash('Your report has been submitted. We will be in touch soon.', 'success')
-    except Exception:
-        flash('There was a problem sending your report. Please try again later.', 'danger')
-
-    return redirect(url_for('report_form'))
-
 # ---------------------------------------------------------------------------
 # Admin calendar
 # ---------------------------------------------------------------------------
@@ -1116,6 +1096,25 @@ def admin_calendar():
                            prev_month_has_data=prev_month_count > 0,
                            pm_month=pm_month,
                            pm_year=pm_year)
+
+@app.route('/admin/calendar/generate/<int:year>', methods=['POST'])
+@admin_required
+def admin_generate_calendar(year):
+    try:
+        full_path, web_path = generate_calendar_png(year)
+        flash(f'Calendar generated for {year}.', 'success')
+    except Exception as e:
+        flash(f'Error generating calendar: {e}', 'danger')
+    return redirect(url_for('admin_calendar'))
+
+@app.route('/admin/calendar/download/<int:year>')
+@admin_required
+def admin_download_calendar(year):
+    path = os.path.join('static', 'calendars', f'{year}_full.png')
+    if os.path.exists(path):
+        return send_file(path, as_attachment=True, download_name=f'HIC_Pool_Calendar_{year}.png')
+    flash('Calendar not found. Generate it first.', 'danger')
+    return redirect(url_for('admin_calendar'))
 
 @app.route('/admin/calendar/copy-previous-year', methods=['POST'])
 @admin_required
