@@ -686,6 +686,20 @@ def lookup():
 
     return render_template('lookup.html', member=member, reservations=reservations)
 
+@app.route('/cancel/<int:res_id>', methods=['POST'])
+def cancel_reservation(res_id):
+    reservation = Reservation.query.get_or_404(res_id)
+    today = today_eastern()
+
+    if reservation.reservation_date < today:
+        flash('Cannot cancel past reservations.', 'danger')
+        return redirect(url_for('lookup'))
+
+    db.session.delete(reservation)
+    db.session.commit()
+    flash('Reservation cancelled.', 'success')
+    return redirect(url_for('lookup'))
+
 @app.route('/report', methods=['GET'])
 def report_form():
     return render_template('report.html')
@@ -709,17 +723,100 @@ def report_submit():
 
     return redirect(url_for('report_form'))
 
+# ---------------------------------------------------------------------------
+# Public calendar routes
+# ---------------------------------------------------------------------------
 @app.route('/calendar')
-def public_calendar():
-    now = datetime.now(EASTERN)
-    year = now.year
-    web_path = os.path.join('static', 'calendars', f'{year}_web.png')
-    full_path = os.path.join('static', 'calendars', f'{year}_full.png')
-    if not os.path.exists(web_path):
-        return redirect(url_for('index'))
-    return render_template('calendar.html', year=year,
-                           web_exists=os.path.exists(web_path),
-                           full_exists=os.path.exists(full_path))
+@app.route('/calendar/<int:year>/<int:month>')
+def calendar_view(year=None, month=None):
+    today = today_eastern()
+    if year is None:
+        year = today.year
+    if month is None:
+        month = today.month
+
+    if month < 1:
+        month = 12
+        year -= 1
+    elif month > 12:
+        month = 1
+        year += 1
+
+    cal = cal_module.Calendar(firstweekday=6)
+    weeks = cal.monthdayscalendar(year, month)
+    month_name = cal_module.month_name[month]
+
+    start_date = date(year, month, 1)
+    if month == 12:
+        end_date = date(year + 1, 1, 1)
+    else:
+        end_date = date(year, month + 1, 1)
+
+    high_use_days = {
+        dt.date.day for dt in DayType.query.filter(
+            DayType.date >= start_date,
+            DayType.date < end_date,
+            DayType.day_type == 'High Use'
+        ).all()
+    }
+
+    prev_month = month - 1
+    prev_year = year
+    if prev_month < 1:
+        prev_month = 12
+        prev_year -= 1
+
+    next_month = month + 1
+    next_year = year
+    if next_month > 12:
+        next_month = 1
+        next_year += 1
+
+    return render_template('calendar.html',
+                           year=year, month=month, month_name=month_name,
+                           weeks=weeks, high_use_days=high_use_days,
+                           today=today,
+                           prev_year=prev_year, prev_month=prev_month,
+                           next_year=next_year, next_month=next_month)
+
+
+@app.route('/calendar/full')
+@app.route('/calendar/full/<int:year>')
+def calendar_full(year=None):
+    today = today_eastern()
+    if year is None:
+        year = today.year
+
+    cal = cal_module.Calendar(firstweekday=6)
+
+    months = []
+    for m in range(1, 13):
+        weeks = cal.monthdayscalendar(year, m)
+        month_name = cal_module.month_name[m]
+
+        start_date = date(year, m, 1)
+        if m == 12:
+            end_date = date(year + 1, 1, 1)
+        else:
+            end_date = date(year, m + 1, 1)
+
+        high_use_days = {
+            dt.date.day for dt in DayType.query.filter(
+                DayType.date >= start_date,
+                DayType.date < end_date,
+                DayType.day_type == 'High Use'
+            ).all()
+        }
+
+        months.append({
+            'month': m,
+            'month_name': month_name,
+            'weeks': weeks,
+            'high_use_days': high_use_days
+        })
+
+    return render_template('calendar_full.html',
+                           year=year, months=months, today=today)
 
 # ---------------------------------------------------------------------------
 # Check-in routes
