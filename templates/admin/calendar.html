@@ -89,7 +89,7 @@
     <div class="card-body">
         <h5 class="card-title">Printable Calendar</h5>
         <form method="POST" action="{{ url_for('admin_generate_calendar', year=current_year) }}" class="d-inline">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
             <button type="submit" class="btn btn-warning">
                 <i class="bi bi-image"></i> Generate {{ current_year }} Calendar PNG
             </button>
@@ -125,6 +125,7 @@
   {% if last_year_has_data %}
   <form method="POST" action="{{ url_for('admin_calendar_copy_previous_year') }}"
         onsubmit="return confirm('Copy day types from {{ month_name.split()[0] }} {{ year - 1 }} → {{ month_name }}?\n\nThis matches by week position and day of week (not exact dates).\nFor example, if the 2nd week Fri-Sun were High Use in {{ year - 1 }}, the 2nd week Fri-Sun in {{ year }} will also become High Use.\n\nExisting entries for {{ month_name }} will be overwritten.')">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
     <input type="hidden" name="year" value="{{ year }}">
     <input type="hidden" name="month" value="{{ month }}">
     <button type="submit" class="btn btn-outline-warning">
@@ -140,6 +141,7 @@
   {% if prev_month_has_data %}
   <form method="POST" action="{{ url_for('admin_calendar_copy_previous_month') }}"
         onsubmit="return confirm('Copy day types from {{ '{:02d}'.format(pm_month) }}/{{ pm_year }} → {{ month_name }}?\n\nThis matches by week position and day of week.\nExisting entries will be overwritten.')">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
     <input type="hidden" name="year" value="{{ year }}">
     <input type="hidden" name="month" value="{{ month }}">
     <button type="submit" class="btn btn-outline-secondary">
@@ -151,6 +153,7 @@
 
 <!-- Calendar grid form -->
 <form method="POST" action="{{ url_for('admin_calendar_bulk') }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
   <input type="hidden" name="year" value="{{ year }}">
   <input type="hidden" name="month" value="{{ month }}">
 
