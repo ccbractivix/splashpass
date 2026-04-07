@@ -7,6 +7,7 @@ from flask import (
     flash, session, Response
 )
 from flask_sqlalchemy import SQLAlchemy
+from flask import send_file
 from flask_wtf.csrf import CSRFProtect
 import pytz
 import qrcode
@@ -14,6 +15,8 @@ import sendgrid
 from sendgrid.helpers.mail import (
     Mail, Email, To, Content, Attachment, FileContent,
     FileName, FileType, Disposition
+from PIL import Image, ImageDraw, ImageFont
+import calendar as pycalendar
 )
 
 # ---------------------------------------------------------------------------
@@ -230,6 +233,185 @@ def send_confirmation_email(member, reservation, qr_base64):
         return response.status_code
     except Exception:
         return None
+
+def generate_calendar_png(year):
+    """Generate printable and web calendar PNGs for a given year."""
+    import os
+
+    # --- Configuration ---
+    FULL_W, FULL_H = 3000, 2000
+    COLS, ROWS = 4, 3
+    HIC_ORANGE = (227, 108, 34)
+    LIGHT_GRAY = (245, 245, 245)
+    HEADER_GOLD = (218, 165, 32)
+    HEADER_TEXT = (255, 255, 255)
+    DOW_BG = (240, 220, 160)
+    DOW_TEXT = (80, 80, 80)
+    DAY_TEXT = (50, 50, 50)
+    DAY_TEXT_HIGH = (255, 255, 255)
+    TITLE_COLOR = (40, 40, 40)
+    BORDER_COLOR = (200, 200, 200)
+    WHITE = (255, 255, 255)
+    FOOTER_COLOR = (100, 100, 100)
+
+    # --- Gather high-use dates ---
+    high_dates = set()
+    days = DayType.query.filter(
+        db.extract('year', DayType.date) == year,
+        DayType.day_type == 'high'
+    ).all()
+    for d in days:
+        high_dates.add(d.date)
+
+    # --- Create image ---
+    img = Image.new('RGB', (FULL_W, FULL_H), WHITE)
+    draw = ImageDraw.Draw(img)
+
+    # --- Fonts (use default; Pillow's built-in) ---
+    try:
+        font_title = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 48)
+        font_month = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 28)
+        font_dow = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 18)
+        font_day = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 20)
+        font_day_bold = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 20)
+        font_footer = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 20)
+    except OSError:
+        font_title = ImageFont.load_default()
+        font_month = font_title
+        font_dow = font_title
+        font_day = font_title
+        font_day_bold = font_title
+        font_footer = font_title
+
+    # --- Layout constants ---
+    TOP_MARGIN = 100
+    BOTTOM_MARGIN = 80
+    SIDE_MARGIN = 60
+    MONTH_PAD = 12
+    LOGO_SIZE = 70
+
+    grid_w = FULL_W - 2 * SIDE_MARGIN
+    grid_h = FULL_H - TOP_MARGIN - BOTTOM_MARGIN
+    cell_w = grid_w // COLS
+    cell_h = grid_h // ROWS
+
+    # --- Title ---
+    title_text = f"HIC — {year} Pool Calendar"
+    bbox = draw.textbbox((0, 0), title_text, font=font_title)
+    tw = bbox[2] - bbox[0]
+    draw.text(((FULL_W - tw) // 2, 25), title_text, fill=TITLE_COLOR, font=font_title)
+
+    # --- Logo ---
+    logo_path = os.path.join('static', 'images', 'logo.png')
+    if os.path.exists(logo_path):
+        logo = Image.open(logo_path).convert('RGBA')
+        logo = logo.resize((LOGO_SIZE, LOGO_SIZE), Image.LANCZOS)
+        img.paste(logo, (SIDE_MARGIN, 15), logo)
+
+    # --- Draw months ---
+    dow_labels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+
+    for month_idx in range(12):
+        row = month_idx // COLS
+        col = month_idx % COLS
+        month_num = month_idx + 1
+
+        mx = SIDE_MARGIN + col * cell_w
+        my = TOP_MARGIN + row * cell_h
+
+        inner_x = mx + MONTH_PAD
+        inner_y = my + MONTH_PAD
+        inner_w = cell_w - 2 * MONTH_PAD
+        inner_h = cell_h - 2 * MONTH_PAD
+
+        # Month header bar
+        header_h = 36
+        draw.rectangle([inner_x, inner_y, inner_x + inner_w, inner_y + header_h], fill=HEADER_GOLD)
+        month_name = pycalendar.month_name[month_num]
+        bbox = draw.textbbox((0, 0), month_name, font=font_month)
+        mtw = bbox[2] - bbox[0]
+        mth = bbox[3] - bbox[1]
+        draw.text((inner_x + (inner_w - mtw) // 2, inner_y + (header_h - mth) // 2 - 2),
+                  month_name, fill=HEADER_TEXT, font=font_month)
+
+        # Day-of-week row
+        dow_y = inner_y + header_h
+        dow_h = 26
+        day_col_w = inner_w / 7
+        draw.rectangle([inner_x, dow_y, inner_x + inner_w, dow_y + dow_h], fill=DOW_BG)
+        for di, label in enumerate(dow_labels):
+            lx = inner_x + di * day_col_w
+            bbox = draw.textbbox((0, 0), label, font=font_dow)
+            lw = bbox[2] - bbox[0]
+            draw.text((lx + (day_col_w - lw) // 2, dow_y + 3), label, fill=DOW_TEXT, font=font_dow)
+
+        # Day grid
+        day_grid_y = dow_y + dow_h
+        remaining_h = inner_h - header_h - dow_h
+        day_row_h = remaining_h / 6  # max 6 week rows
+
+        # Get calendar for this month (Sunday start)
+        cal = pycalendar.Calendar(firstweekday=6)  # Sunday
+        weeks = cal.monthdayscalendar(year, month_num)
+
+        for wi, week in enumerate(weeks):
+            for di, day in enumerate(week):
+                dx = inner_x + di * day_col_w
+                dy = day_grid_y + wi * day_row_h
+
+                if day == 0:
+                    # Empty cell
+                    draw.rectangle([dx, dy, dx + day_col_w, dy + day_row_h],
+                                   fill=WHITE, outline=BORDER_COLOR, width=1)
+                else:
+                    from datetime import date as date_type
+                    current_date = date_type(year, month_num, day)
+                    is_high = current_date in high_dates
+
+                    bg = HIC_ORANGE if is_high else LIGHT_GRAY
+                    txt_color = DAY_TEXT_HIGH if is_high else DAY_TEXT
+                    fnt = font_day_bold if is_high else font_day
+
+                    draw.rectangle([dx, dy, dx + day_col_w, dy + day_row_h],
+                                   fill=bg, outline=BORDER_COLOR, width=1)
+
+                    day_str = str(day)
+                    bbox = draw.textbbox((0, 0), day_str, font=fnt)
+                    dw = bbox[2] - bbox[0]
+                    dh = bbox[3] - bbox[1]
+                    draw.text((dx + (day_col_w - dw) // 2, dy + (day_row_h - dh) // 2 - 1),
+                              day_str, fill=txt_color, font=fnt)
+
+        # Border around entire month
+        draw.rectangle([inner_x, inner_y, inner_x + inner_w, inner_y + inner_h],
+                       outline=BORDER_COLOR, width=2)
+
+    # --- Footer ---
+    footer_lines = [
+        "High Use Days are shown in Orange. Resort Day use bands must be worn at all times while on property.",
+        "Hours of usage reflect hours of operation 8am - 10pm."
+    ]
+    fy = FULL_H - BOTTOM_MARGIN + 10
+    for line in footer_lines:
+        bbox = draw.textbbox((0, 0), line, font=font_footer)
+        flw = bbox[2] - bbox[0]
+        draw.text(((FULL_W - flw) // 2, fy), line, fill=FOOTER_COLOR, font=font_footer)
+        fy += 28
+
+    # --- Save ---
+    cal_dir = os.path.join('static', 'calendars')
+    os.makedirs(cal_dir, exist_ok=True)
+
+    full_path = os.path.join(cal_dir, f'{year}_full.png')
+    web_path = os.path.join(cal_dir, f'{year}_web.png')
+
+    img.save(full_path, 'PNG', dpi=(300, 300))
+
+    web_img = img.resize((400, 267), Image.LANCZOS)
+    web_img.save(web_path, 'PNG')
+
+    return full_path, web_path
+
 
 # ---------------------------------------------------------------------------
 # Public routes
@@ -489,6 +671,40 @@ def lookup():
     ).order_by(Reservation.reservation_date).all()
 
     return render_template('lookup.html', member=member, reservations=reservations)
+
+@app.route('/admin/calendar/generate/<int:year>', methods=['POST'])
+def admin_generate_calendar(year):
+    if 'admin' not in session:
+        return redirect(url_for('admin_login'))
+    try:
+        full_path, web_path = generate_calendar_png(year)
+        flash(f'Calendar generated for {year}.', 'success')
+    except Exception as e:
+        flash(f'Error generating calendar: {e}', 'danger')
+    return redirect(url_for('admin_calendar'))
+
+@app.route('/admin/calendar/download/<int:year>')
+def admin_download_calendar(year):
+    if 'admin' not in session:
+        return redirect(url_for('admin_login'))
+    path = os.path.join('static', 'calendars', f'{year}_full.png')
+    if os.path.exists(path):
+        return send_file(path, as_attachment=True, download_name=f'HIC_Pool_Calendar_{year}.png')
+    flash('Calendar not found.', 'danger')
+    return redirect(url_for('admin_calendar'))
+
+@app.route('/calendar')
+def public_calendar():
+    now = datetime.now(eastern)
+    year = now.year
+    web_path = os.path.join('static', 'calendars', f'{year}_web.png')
+    full_path = os.path.join('static', 'calendars', f'{year}_full.png')
+    if not os.path.exists(web_path):
+        return redirect(url_for('index'))
+    return render_template('calendar.html', year=year,
+                           web_exists=os.path.exists(web_path),
+                           full_exists=os.path.exists(full_path))
+
 
 # ---------------------------------------------------------------------------
 # Check-in routes
