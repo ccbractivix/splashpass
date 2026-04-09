@@ -4,7 +4,7 @@ from functools import wraps
 
 from flask import (
     Flask, render_template, request, redirect, url_for,
-    flash, session, Response, send_file
+    flash, session, Response, send_file, jsonify
 )
 from flask_sqlalchemy import SQLAlchemy
 from flask_wtf.csrf import CSRFProtect
@@ -471,41 +471,29 @@ def inject_calendar_flag():
 # ---------------------------------------------------------------------------
 @app.route('/')
 def index():
-    return render_template('index.html')
+    member = None
+    member_id = session.get('member_id')
+    if member_id:
+        member = Member.query.get(member_id)
+        if member and not member.active:
+            session.pop('member_id', None)
+            member = None
+    return render_template('index.html', member=member)
 
 @app.route('/book', methods=['GET', 'POST'])
 def book():
-    if request.method == 'GET':
-        member_id = session.get('member_id')
-        if member_id:
-            member = Member.query.get(member_id)
-            if member and member.active:
-                available_dates = get_member_available_dates(member)
-                return render_template('book.html', member=member, available_dates=available_dates)
-            else:
-                session.pop('member_id', None)
-        return render_template('book.html')
+    member_id = session.get('member_id')
+    if not member_id:
+        flash('Please log in first.', 'warning')
+        return redirect(url_for('index'))
 
-    owner_number = request.form.get('owner_number', '').strip()
-    last_name = request.form.get('last_name', '').strip()
-
-    if not owner_number or not last_name:
-        flash('Please enter both your Owner Number and Last Name.' + REPORT_LINK, 'danger')
-        return render_template('book.html')
-
-    member = Member.query.filter_by(owner_number=owner_number, active=True).first()
-    if not member:
-        flash('Account not found. Please check your Owner Number and Last Name and try again.' + REPORT_LINK, 'danger')
-        return render_template('book.html')
-
-    if member.last_name.strip().lower() != last_name.lower():
-        flash('Account not found. Please check your Owner Number and Last Name and try again.' + REPORT_LINK, 'danger')
-        return render_template('book.html')
-
-    session['member_id'] = member.id
+    member = Member.query.get(member_id)
+    if not member or not member.active:
+        session.pop('member_id', None)
+        flash('Please log in first.', 'warning')
+        return redirect(url_for('index'))
 
     available_dates = get_member_available_dates(member)
-
     return render_template('book.html', member=member, available_dates=available_dates)
 
 @app.route('/reserve', methods=['POST'])
@@ -678,38 +666,16 @@ def terms():
 
 @app.route('/lookup', methods=['GET', 'POST'])
 def lookup():
-    if request.method == 'GET':
-        member_id = session.get('member_id')
-        if member_id:
-            member = Member.query.get(member_id)
-            if member and member.active:
-                today = today_eastern()
-                reservations = Reservation.query.filter(
-                    Reservation.member_id == member.id,
-                    Reservation.reservation_date >= today
-                ).order_by(Reservation.reservation_date).all()
-                return render_template('lookup.html', member=member, reservations=reservations)
-            else:
-                session.pop('member_id', None)
-        return render_template('lookup.html')
+    member_id = session.get('member_id')
+    if not member_id:
+        flash('Please log in first.', 'warning')
+        return redirect(url_for('index'))
 
-    owner_number = request.form.get('owner_number', '').strip()
-    last_name = request.form.get('last_name', '').strip()
-
-    if not owner_number or not last_name:
-        flash('Please enter both your Owner Number and Last Name.', 'danger')
-        return render_template('lookup.html')
-
-    member = Member.query.filter_by(owner_number=owner_number, active=True).first()
-    if not member:
-        flash('Account not found. Please check your Owner Number and Last Name and try again.' + REPORT_LINK, 'danger')
-        return render_template('lookup.html')
-
-    if member.last_name.strip().lower() != last_name.lower():
-        flash('Account not found. Please check your Owner Number and Last Name and try again.' + REPORT_LINK, 'danger')
-        return render_template('lookup.html')
-
-    session['member_id'] = member.id
+    member = Member.query.get(member_id)
+    if not member or not member.active:
+        session.pop('member_id', None)
+        flash('Please log in first.', 'warning')
+        return redirect(url_for('index'))
 
     today = today_eastern()
     reservations = Reservation.query.filter(
@@ -732,6 +698,21 @@ def cancel_reservation(res_id):
     db.session.commit()
     flash('Reservation cancelled.', 'success')
     return redirect(url_for('lookup'))
+
+@app.route('/member/login', methods=['POST'])
+def member_login():
+    owner_number = request.form.get('owner_number', '').strip()
+    last_name = request.form.get('last_name', '').strip()
+
+    if not owner_number or not last_name:
+        return jsonify({'success': False, 'message': 'Please enter both your Owner Number and Last Name.'}), 400
+
+    member = Member.query.filter_by(owner_number=owner_number, active=True).first()
+    if not member or member.last_name.strip().lower() != last_name.lower():
+        return jsonify({'success': False, 'message': 'Account not found. Please check your Owner Number and Last Name and try again.'}), 401
+
+    session['member_id'] = member.id
+    return jsonify({'success': True, 'name': f'{member.first_name} {member.last_name}'})
 
 @app.route('/member/logout')
 def member_logout():
@@ -756,15 +737,26 @@ def report_submit():
     owner_number = request.form.get('owner_number', '').strip()
     contact = request.form.get('contact', '').strip()
     message = request.form.get('message', '').strip()
+    is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
 
     if not name or not owner_number or not contact or not message:
+        if is_ajax:
+            return jsonify({'success': False, 'message': 'Please fill out all fields.'}), 400
         flash('Please fill out all fields.', 'danger')
         return redirect(url_for('report_form'))
 
     try:
         send_problem_report_email(name, owner_number, contact, message)
+        if is_ajax:
+            session.pop('member_id', None)
+            session.pop('pending_reservation', None)
+            return jsonify({'success': True, 'message': 'Your report has been submitted. We will be in touch soon. You will be logged out shortly.'})
         flash('Your report has been submitted. We will be in touch soon.', 'success')
     except Exception:
+        if is_ajax:
+            session.pop('member_id', None)
+            session.pop('pending_reservation', None)
+            return jsonify({'success': False, 'message': 'There was a problem sending your report. Please try again later.'}), 500
         flash('There was a problem sending your report. Please try again later.', 'danger')
 
     return redirect(url_for('report_form'))

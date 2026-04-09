@@ -3,26 +3,6 @@
 {% block content %}
 <h2 class="mb-4">Book a Reservation</h2>
 
-{% if not member %}
-<div class="card shadow-sm">
-  <div class="card-body">
-    <h5 class="card-title">Step 1: Verify Your Account</h5>
-    <form method="POST">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <div class="mb-3">
-        <label for="owner_number" class="form-label">Owner Number</label>
-        <input type="text" class="form-control" id="owner_number" name="owner_number" required>
-      </div>
-      <div class="mb-3">
-        <label for="last_name" class="form-label">Last Name on Account</label>
-        <input type="text" class="form-control" id="last_name" name="last_name" required>
-      </div>
-      <button type="submit" class="btn btn-primary">Continue</button>
-    </form>
-  </div>
-</div>
-
-{% else %}
 <div class="alert alert-info">
   Welcome, <strong>{{ member.first_name }} {{ member.last_name }}</strong>
   — {{ member.membership }} Member
@@ -32,7 +12,7 @@
 {% if available_dates %}
 <div class="card shadow-sm">
   <div class="card-body">
-    <h5 class="card-title">Step 2: Select a Date</h5>
+    <h5 class="card-title">Select a Date</h5>
     <form method="POST" action="{{ url_for('reserve') }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="hidden" name="owner_number" value="{{ member.owner_number }}">
@@ -61,7 +41,7 @@
       </div>
 
       <button type="submit" class="btn btn-success">Reserve</button>
-      <a href="{{ url_for('book') }}" class="btn btn-secondary ms-2">Start Over</a>
+      <a href="{{ url_for('index') }}" class="btn btn-secondary ms-2">Back to Home</a>
     </form>
   </div>
 </div>
@@ -69,12 +49,10 @@
 <div class="alert alert-warning">
   No dates are currently available for your membership tier.
 </div>
-<a href="{{ url_for('book') }}" class="btn btn-secondary">Start Over</a>
-{% endif %}
+<a href="{{ url_for('index') }}" class="btn btn-secondary">Back to Home</a>
 {% endif %}
 {% endblock %}
 {% block extra_js %}
-{% if member %}
 <script>
 (function(){
   var t,D=120000;
@@ -84,5 +62,4 @@
   window.addEventListener('beforeunload',function(){navigator.sendBeacon('{{ url_for("member_beacon_logout") }}');});
 })();
 </script>
-{% endif %}
 {% endblock %}

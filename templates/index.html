@@ -1,15 +1,189 @@
 {% extends 'base.html' %}
 {% block title %}SplashPass - Home{% endblock %}
 {% block content %}
+
+<!-- Hero image -->
+<div class="text-center mb-4">
+    <img src="{{ url_for('static', filename='images/Main_Pool_85.jpg') }}" alt="Cape Canaveral Beach Resort Pool" class="img-fluid rounded shadow" style="max-height:360px; width:100%; object-fit:cover;">
+</div>
+
 <div class="card text-center">
     <h1>Cape Canaveral Beach Resort<br>SplashPass</h1>
     <p>Welcome Members!</p>
+    {% if member %}
+    <div class="alert alert-info">
+        Logged in as <strong>{{ member.first_name }} {{ member.last_name }}</strong>
+        <a href="{{ url_for('member_logout') }}" class="btn btn-sm btn-outline-secondary ms-2">Logout</a>
+    </div>
+    {% endif %}
     <div class="mt-1">
         <a href="{{ url_for('book') }}" class="btn btn-primary">Make a Reservation</a>
         <a href="{{ url_for('lookup') }}" class="btn btn-secondary" style="margin-left:0.5rem;">Look Up Reservation</a>
-        <a href="{{ url_for('report_form') }}" class="btn btn-outline-warning">
-    <i class="bi bi-exclamation-triangle"></i> Reservation Problem Report
-</a>
     </div>
 </div>
+
+<!-- Login Modal -->
+<div class="modal fade" id="loginModal" tabindex="-1" aria-labelledby="loginModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="loginModalLabel">🏊 Member Login</h5>
+      </div>
+      <div class="modal-body">
+        <div id="loginAlert" class="alert d-none"></div>
+        <form id="loginForm">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <div class="mb-3">
+            <label for="login_owner_number" class="form-label">Owner Number</label>
+            <input type="text" class="form-control" id="login_owner_number" name="owner_number" required>
+          </div>
+          <div class="mb-3">
+            <label for="login_last_name" class="form-label">Last Name on Account</label>
+            <input type="text" class="form-control" id="login_last_name" name="last_name" required>
+          </div>
+          <div class="d-grid">
+            <button type="submit" class="btn btn-primary btn-lg">Login</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Report Problem Modal -->
+<div class="modal fade" id="reportModal" tabindex="-1" aria-labelledby="reportModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="reportModalLabel"><i class="bi bi-exclamation-triangle text-warning"></i> Report a Problem</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted text-center mb-3">Having trouble logging in? Let us know and we'll get it sorted out.</p>
+        <div id="reportAlert" class="alert d-none"></div>
+        <form id="reportForm">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <div class="mb-3">
+            <label for="report_name" class="form-label">Your Name</label>
+            <input type="text" class="form-control" id="report_name" name="name" required>
+          </div>
+          <div class="mb-3">
+            <label for="report_owner_number" class="form-label">Owner / Member Number</label>
+            <input type="text" class="form-control" id="report_owner_number" name="owner_number" required>
+          </div>
+          <div class="mb-3">
+            <label for="report_contact" class="form-label">Email or Phone Number</label>
+            <input type="text" class="form-control" id="report_contact" name="contact" required placeholder="So we can reach you back">
+          </div>
+          <div class="mb-3">
+            <label for="report_message" class="form-label">Describe the Problem</label>
+            <textarea class="form-control" id="report_message" name="message" rows="4" required placeholder="Tell us what happened..."></textarea>
+          </div>
+          <div class="d-grid">
+            <button type="submit" class="btn btn-warning btn-lg"><i class="bi bi-send"></i> Submit Report</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+{% block extra_js %}
+<script>
+(function(){
+  var loggedIn = {{ 'true' if member else 'false' }};
+  var failedAttempts = 0;
+  var inactivityTimer;
+  var INACTIVITY_TIMEOUT = 120000; // 2 minutes
+
+  // --- Inactivity auto-logout ---
+  function resetInactivityTimer(){
+    clearTimeout(inactivityTimer);
+    if(loggedIn){
+      inactivityTimer = setTimeout(function(){
+        window.location.href = '{{ url_for("member_logout") }}';
+      }, INACTIVITY_TIMEOUT);
+    }
+  }
+  if(loggedIn){
+    ['mousemove','keydown','click','scroll','touchstart'].forEach(function(e){
+      document.addEventListener(e, resetInactivityTimer);
+    });
+    resetInactivityTimer();
+    window.addEventListener('beforeunload', function(){
+      navigator.sendBeacon('{{ url_for("member_beacon_logout") }}');
+    });
+  }
+
+  // --- Login modal ---
+  if(!loggedIn){
+    var loginModal = new bootstrap.Modal(document.getElementById('loginModal'));
+    loginModal.show();
+  }
+
+  document.getElementById('loginForm').addEventListener('submit', function(e){
+    e.preventDefault();
+    var form = this;
+    var alertEl = document.getElementById('loginAlert');
+    var formData = new FormData(form);
+    fetch('{{ url_for("member_login") }}', {
+      method: 'POST',
+      body: formData
+    }).then(function(resp){ return resp.json().then(function(data){ return {ok: resp.ok, data: data}; }); })
+    .then(function(result){
+      if(result.ok && result.data.success){
+        alertEl.className = 'alert alert-success';
+        alertEl.textContent = 'Welcome, ' + result.data.name + '!';
+        failedAttempts = 0;
+        loggedIn = true;
+        setTimeout(function(){ window.location.reload(); }, 800);
+      } else {
+        failedAttempts++;
+        alertEl.className = 'alert alert-danger';
+        alertEl.textContent = result.data.message || 'Login failed.';
+        if(failedAttempts >= 2){
+          var loginModalInstance = bootstrap.Modal.getInstance(document.getElementById('loginModal'));
+          if(loginModalInstance) loginModalInstance.hide();
+          var reportModal = new bootstrap.Modal(document.getElementById('reportModal'));
+          reportModal.show();
+        }
+      }
+    }).catch(function(){
+      alertEl.className = 'alert alert-danger';
+      alertEl.textContent = 'An error occurred. Please try again.';
+    });
+  });
+
+  // --- Report form submission ---
+  document.getElementById('reportForm').addEventListener('submit', function(e){
+    e.preventDefault();
+    var form = this;
+    var alertEl = document.getElementById('reportAlert');
+    var formData = new FormData(form);
+    fetch('{{ url_for("report_submit") }}', {
+      method: 'POST',
+      body: formData,
+      headers: { 'X-Requested-With': 'XMLHttpRequest' }
+    }).then(function(resp){ return resp.json().then(function(data){ return {ok: resp.ok, data: data}; }); })
+    .then(function(result){
+      if(result.data.success){
+        alertEl.className = 'alert alert-success';
+        alertEl.textContent = result.data.message;
+        form.reset();
+        // Auto logout after confirmation
+        setTimeout(function(){
+          window.location.href = '{{ url_for("member_logout") }}';
+        }, 3000);
+      } else {
+        alertEl.className = 'alert alert-danger';
+        alertEl.textContent = result.data.message || 'Please fill out all fields.';
+      }
+    }).catch(function(){
+      alertEl.className = 'alert alert-danger';
+      alertEl.textContent = 'An error occurred. Please try again.';
+    });
+  });
+})();
+</script>
 {% endblock %}

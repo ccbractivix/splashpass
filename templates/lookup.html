@@ -3,31 +3,13 @@
 {% block content %}
 <h2 class="mb-4">My Reservations</h2>
 
-{% if not member %}
-<div class="card shadow-sm">
-  <div class="card-body">
-    <h5 class="card-title">Look Up Your Reservations</h5>
-    <form method="POST">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <div class="mb-3">
-        <label for="owner_number" class="form-label">Owner Number</label>
-        <input type="text" class="form-control" id="owner_number" name="owner_number" required>
-      </div>
-      <div class="mb-3">
-        <label for="last_name" class="form-label">Last Name on Account</label>
-        <input type="text" class="form-control" id="last_name" name="last_name" required>
-      </div>
-      <button type="submit" class="btn btn-primary">Look Up</button>
-    </form>
-  </div>
-</div>
-
-{% elif reservations %}
 <div class="alert alert-info">
-  Showing upcoming reservations for <strong>{{ member.first_name }} {{ member.last_name }}</strong>
+  Showing reservations for <strong>{{ member.first_name }} {{ member.last_name }}</strong>
   ({{ member.owner_number }})
   <a href="{{ url_for('member_logout') }}" class="btn btn-sm btn-outline-secondary ms-2">Logout</a>
 </div>
+
+{% if reservations %}
 <div class="table-responsive">
   <table class="table table-striped">
     <thead>
@@ -56,20 +38,14 @@
     </tbody>
   </table>
 </div>
-<a href="{{ url_for('lookup') }}" class="btn btn-secondary">Back</a>
+<a href="{{ url_for('index') }}" class="btn btn-secondary">Back to Home</a>
 
 {% else %}
-<div class="alert alert-info">
-  Logged in as <strong>{{ member.first_name }} {{ member.last_name }}</strong>
-  ({{ member.owner_number }})
-  <a href="{{ url_for('member_logout') }}" class="btn btn-sm btn-outline-secondary ms-2">Logout</a>
-</div>
 <div class="alert alert-warning">No upcoming reservations found.</div>
 <a href="{{ url_for('book') }}" class="btn btn-primary">Make a Reservation</a>
 {% endif %}
 {% endblock %}
 {% block extra_js %}
-{% if member %}
 <script>
 (function(){
   var t,D=120000;
@@ -79,5 +55,4 @@
   window.addEventListener('beforeunload',function(){navigator.sendBeacon('{{ url_for("member_beacon_logout") }}');});
 })();
 </script>
-{% endif %}
 {% endblock %}
