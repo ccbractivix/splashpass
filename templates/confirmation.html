@@ -13,6 +13,24 @@
     </div>
     <p style="margin-top:0.5rem; color:#666; font-size:0.9rem;">Show this QR code at check-in.</p>
 
+    <!-- Optional email confirmation -->
+    <div id="email-section" class="mt-3 mb-3" style="max-width:420px; margin-left:auto; margin-right:auto;">
+        <hr>
+        <p style="font-size:0.95rem; margin-bottom:0.25rem;"><i class="bi bi-envelope"></i> <strong>Want a copy for check-in?</strong></p>
+        <p style="font-size:0.85rem; color:#666; margin-bottom:0.75rem;">
+            We can email your confirmation code and QR code so you can present it to an agent at check-in.
+            Your email address will <strong>not</strong> be stored, saved, or used for any other purpose including marketing.
+        </p>
+        <form id="email-form" class="d-flex gap-2 justify-content-center">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="email" id="confirm-email" class="form-control" placeholder="Enter your email" required style="max-width:260px;">
+            <button type="submit" class="btn btn-outline-primary btn-sm" id="send-email-btn">
+                <i class="bi bi-send"></i> Send
+            </button>
+        </form>
+        <div id="email-feedback" class="mt-2" style="font-size:0.9rem;"></div>
+    </div>
+
     <div class="mt-1">
         <a href="{{ url_for('book') }}" class="btn btn-primary">Make Another Reservation</a>
         <a href="{{ url_for('lookup') }}" class="btn btn-secondary" style="margin-left:0.5rem;">My Reservations</a>
@@ -28,5 +46,42 @@
   ['mousemove','keydown','click','scroll','touchstart'].forEach(function(e){document.addEventListener(e,r);});
   r();
 })();
+
+document.getElementById('email-form').addEventListener('submit', function(e){
+  e.preventDefault();
+  var btn = document.getElementById('send-email-btn');
+  var fb = document.getElementById('email-feedback');
+  var email = document.getElementById('confirm-email').value.trim();
+  if (!email) return;
+
+  btn.disabled = true;
+  btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Sending…';
+  fb.innerHTML = '';
+
+  var fd = new FormData();
+  fd.append('email', email);
+  fd.append('confirmation_code', {{ reservation.confirmation_code|tojson }});
+  fd.append('csrf_token', '{{ csrf_token() }}');
+
+  window._nav = true;
+  fetch('{{ url_for("send_confirmation_email_route") }}', {method:'POST', body:fd})
+    .then(function(resp){ return resp.json().then(function(data){ return {ok:resp.ok, data:data}; }); })
+    .then(function(result){
+      if (result.ok) {
+        fb.innerHTML = '<span class="text-success"><i class="bi bi-check-circle"></i> ' + result.data.message + '</span>';
+        document.getElementById('email-section').querySelectorAll('input[type=email], button[type=submit]').forEach(function(el){ el.disabled = true; });
+      } else {
+        fb.innerHTML = '<span class="text-danger"><i class="bi bi-exclamation-circle"></i> ' + result.data.message + '</span>';
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-send"></i> Send';
+      }
+    })
+    .catch(function(){
+      fb.innerHTML = '<span class="text-danger"><i class="bi bi-exclamation-circle"></i> Something went wrong. Please try again.</span>';
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-send"></i> Send';
+    })
+    .finally(function(){ window._nav = false; });
+});
 </script>
 {% endblock %}

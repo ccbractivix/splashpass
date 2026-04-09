@@ -1,4 +1,4 @@
-import os, io, csv, base64, string, random, calendar as cal_module
+import os, io, csv, base64, string, random, re, calendar as cal_module
 from datetime import datetime, timedelta, date
 from functools import wraps
 
@@ -193,9 +193,10 @@ Message:
     response = sg.client.mail.send.post(request_body=mail.get())
     return response.status_code
 
-def send_confirmation_email(member, reservation, qr_base64):
-    """Send reservation confirmation with QR code to member's email."""
-    if not member.email:
+def send_confirmation_email(member, reservation, qr_base64, recipient_email=None):
+    """Send reservation confirmation with QR code to the given email address."""
+    email_addr = recipient_email or member.email
+    if not email_addr:
         return None
 
     api_key = os.environ.get('SENDGRID_API_KEY')
@@ -204,7 +205,7 @@ def send_confirmation_email(member, reservation, qr_base64):
 
     sg = sendgrid.SendGridAPIClient(api_key=api_key)
     from_email = Email(os.environ.get('MAIL_FROM', 'noreply@ccbrsplashpass.com'))
-    to_email = To(member.email)
+    to_email = To(email_addr)
 
     subject = f"SplashPass Confirmation — {reservation.reservation_date.strftime('%A, %B %-d, %Y')}"
 
@@ -680,13 +681,6 @@ def terms():
 
     qr_data = make_qr_base64(code)
 
-    email_status = send_confirmation_email(member, reservation, qr_data)
-    if email_status and 200 <= email_status < 300:
-        flash('Confirmation email sent!', 'success')
-    elif member.email:
-        flash('Reservation confirmed but we could not send the confirmation email. '
-              'Please save your confirmation code.', 'warning')
-
     return render_template('confirmation.html',
                            reservation=reservation,
                            member=member,
@@ -754,6 +748,40 @@ def member_beacon_logout():
     session.pop('member_id', None)
     session.pop('pending_reservation', None)
     return '', 204
+
+@app.route('/send-confirmation-email', methods=['POST'])
+def send_confirmation_email_route():
+    """Send confirmation email with QR code to a user-provided email address."""
+    member_id = session.get('member_id')
+    if not member_id:
+        return jsonify({'success': False, 'message': 'Session expired. Please log in again.'}), 401
+
+    member = Member.query.get(member_id)
+    if not member or not member.active:
+        return jsonify({'success': False, 'message': 'Member not found.'}), 404
+
+    email = (request.form.get('email') or '').strip()
+    confirmation_code = (request.form.get('confirmation_code') or '').strip()
+
+    if not email or not re.match(r'^[^@\s]+@[^@\s]+\.[^@\s]+$', email):
+        return jsonify({'success': False, 'message': 'Please enter a valid email address.'}), 400
+    if not confirmation_code:
+        return jsonify({'success': False, 'message': 'Missing confirmation code.'}), 400
+
+    reservation = Reservation.query.filter_by(
+        confirmation_code=confirmation_code,
+        member_id=member.id
+    ).first()
+    if not reservation:
+        return jsonify({'success': False, 'message': 'Reservation not found.'}), 404
+
+    qr_data = make_qr_base64(confirmation_code)
+    status = send_confirmation_email(member, reservation, qr_data, recipient_email=email)
+
+    if status and 200 <= status < 300:
+        return jsonify({'success': True, 'message': 'Confirmation email sent! Check your inbox.'})
+    else:
+        return jsonify({'success': False, 'message': 'Unable to send email. Please save your confirmation code and QR code from this screen.'}), 500
 
 @app.route('/report', methods=['GET'])
 def report_form():
