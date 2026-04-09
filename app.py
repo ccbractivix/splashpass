@@ -1141,6 +1141,11 @@ def upload_members():
             flash(f'Could not find name columns. Headers found: {raw_headers}', 'danger')
             return redirect(url_for('admin_members'))
 
+        # Purge existing members (and their reservations) so the
+        # uploaded list fully replaces the old one.
+        Reservation.query.delete()
+        Member.query.delete()
+
         count = 0
         skipped = 0
         no_tier = 0
@@ -1177,26 +1182,16 @@ def upload_members():
 
             email = (row.get(email_col) or '').strip() if email_col else ''
 
-            existing = Member.query.filter_by(owner_number=owner_number).first()
-            if existing:
-                existing.last_name = last_name
-                existing.first_name = first_name
-                existing.membership = membership
-                existing.enrollment_type = enrollment_type
-                existing.active = True
-                if email:
-                    existing.email = email
-            else:
-                m = Member(
-                    owner_number=owner_number,
-                    last_name=last_name,
-                    first_name=first_name,
-                    membership=membership,
-                    enrollment_type=enrollment_type,
-                    email=email if email else None,
-                    active=True
-                )
-                db.session.add(m)
+            m = Member(
+                owner_number=owner_number,
+                last_name=last_name,
+                first_name=first_name,
+                membership=membership,
+                enrollment_type=enrollment_type,
+                email=email if email else None,
+                active=True
+            )
+            db.session.add(m)
             count += 1
 
         db.session.commit()
