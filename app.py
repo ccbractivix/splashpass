@@ -136,6 +136,15 @@ def get_member_available_dates(member):
     else:
         return []
 
+    # Pre-fetch existing reservations for this member in the date range
+    existing_dates = {
+        r.reservation_date for r in Reservation.query.filter(
+            Reservation.member_id == member.id,
+            Reservation.reservation_date >= today,
+            Reservation.reservation_date <= max_date
+        ).all()
+    }
+
     available_dates = []
     for i in range((max_date - today).days + 1):
         d = today + timedelta(days=i)
@@ -149,9 +158,7 @@ def get_member_available_dates(member):
         used = get_capacity_used(d)
         remaining = capacity - used
         if remaining > 0:
-            existing = Reservation.query.filter_by(
-                member_id=member.id, reservation_date=d).first()
-            if existing:
+            if d in existing_dates:
                 continue
             available_dates.append({
                 'date': d,
