@@ -35,6 +35,8 @@ ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'admin')
 CHECKIN_PASSWORD = os.environ.get('CHECKIN_PASSWORD', 'checkin')
 DEFAULT_CAPACITY = 128
 EASTERN = pytz.timezone('US/Eastern')
+EST_MEMBERSHIP = 'Employee'
+EST_MAX_ADVANCE_DAYS = 183  # ~6 months
 
 db = SQLAlchemy(app)
 csrf = CSRFProtect(app)
@@ -1141,7 +1143,7 @@ def employee_splash_time():
         return render_template('admin/employee_splash_time.html')
 
     today = today_eastern()
-    max_date = today + timedelta(days=183)  # ~6 months
+    max_date = today + timedelta(days=EST_MAX_ADVANCE_DAYS)
 
     if res_date < today:
         flash('Cannot make a reservation in the past.', 'danger')
@@ -1167,8 +1169,8 @@ def employee_splash_time():
         owner_number=code,
         last_name=last_name,
         first_name=first_name,
-        enrollment_type='Employee',
-        membership='Employee',
+        enrollment_type=EST_MEMBERSHIP,
+        membership=EST_MEMBERSHIP,
         active=True
     )
     db.session.add(emp_member)
@@ -1259,7 +1261,7 @@ def upload_members():
         # will be reactivated (or created) below.  Reservations are
         # intentionally left untouched so upcoming bookings survive.
         # Employee members (created via Employee Splash Time) are excluded.
-        Member.query.filter(Member.membership != 'Employee').update({Member.active: False})
+        Member.query.filter(Member.membership != EST_MEMBERSHIP).update({Member.active: False})
 
         count = 0
         skipped = 0
