@@ -26,6 +26,7 @@
 <div class="alert alert-info">
   Showing upcoming reservations for <strong>{{ member.first_name }} {{ member.last_name }}</strong>
   ({{ member.owner_number }})
+  <a href="{{ url_for('member_logout') }}" class="btn btn-sm btn-outline-secondary ms-2">Logout</a>
 </div>
 <div class="table-responsive">
   <table class="table table-striped">
@@ -44,7 +45,7 @@
         <td>{{ r.party_size }}</td>
         <td><code>{{ r.confirmation_code }}</code></td>
         <td>
-          <form method="POST" action="{{ url_for('delete_reservation', res_id=r.id) }}"
+          <form method="POST" action="{{ url_for('cancel_reservation', res_id=r.id) }}"
                 onsubmit="return confirm('Cancel this reservation?')">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <button type="submit" class="btn btn-sm btn-danger">Cancel</button>
@@ -58,7 +59,25 @@
 <a href="{{ url_for('lookup') }}" class="btn btn-secondary">Back</a>
 
 {% else %}
+<div class="alert alert-info">
+  Logged in as <strong>{{ member.first_name }} {{ member.last_name }}</strong>
+  ({{ member.owner_number }})
+  <a href="{{ url_for('member_logout') }}" class="btn btn-sm btn-outline-secondary ms-2">Logout</a>
+</div>
 <div class="alert alert-warning">No upcoming reservations found.</div>
-<a href="{{ url_for('lookup') }}" class="btn btn-secondary">Back</a>
+<a href="{{ url_for('book') }}" class="btn btn-primary">Make a Reservation</a>
+{% endif %}
+{% endblock %}
+{% block extra_js %}
+{% if member %}
+<script>
+(function(){
+  var t,D=120000;
+  function r(){clearTimeout(t);t=setTimeout(function(){window.location.href='{{ url_for("member_logout") }}';},D);}
+  ['mousemove','keydown','click','scroll','touchstart'].forEach(function(e){document.addEventListener(e,r);});
+  r();
+  window.addEventListener('beforeunload',function(){navigator.sendBeacon('{{ url_for("member_beacon_logout") }}');});
+})();
+</script>
 {% endif %}
 {% endblock %}

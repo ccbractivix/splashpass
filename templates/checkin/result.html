@@ -38,3 +38,10 @@
 
 <a href="{{ url_for('checkin_dashboard') }}" class="btn btn-secondary mt-2">← Back to Check-In</a>
 {% endblock %}
+{% block extra_js %}
+<script>
+(function(){
+  window.addEventListener('beforeunload',function(){navigator.sendBeacon('{{ url_for("checkin_beacon_logout") }}');});
+})();
+</script>
+{% endblock %}
