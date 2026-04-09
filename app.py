@@ -52,6 +52,7 @@ class Member(db.Model):
     owner_number = db.Column(db.String(20), unique=True, nullable=False)
     last_name = db.Column(db.String(100), nullable=False)
     first_name = db.Column(db.String(100), nullable=False)
+    enrollment_type = db.Column(db.String(20), nullable=False, default='Individual', server_default='Individual')
     membership = db.Column(db.String(20), nullable=False)
     email = db.Column(db.String(200), nullable=True)
     active = db.Column(db.Boolean, default=True)
@@ -1124,7 +1125,9 @@ def upload_members():
             'membership', 'membership_level', 'membershiplevel',
             'membership_type', 'membershiptype', 'level', 'tier',
             'type', 'member_level', 'member_type', 'pass_type',
-            'passtype', 'pass', 'pass_level', 'passlevel',
+            'passtype', 'pass', 'pass_level', 'passlevel'
+        ])
+        enroll_col = find_col([
             'enrollment_type', 'enrollmenttype', 'enrollment'
         ])
         email_col = find_col([
@@ -1168,6 +1171,10 @@ def upload_members():
                 membership = 'Silver'
                 no_tier += 1
 
+            enrollment_type = (row.get(enroll_col) or '').strip() if enroll_col else ''
+            if not enrollment_type:
+                enrollment_type = 'Individual'
+
             email = (row.get(email_col) or '').strip() if email_col else ''
 
             existing = Member.query.filter_by(owner_number=owner_number).first()
@@ -1175,6 +1182,7 @@ def upload_members():
                 existing.last_name = last_name
                 existing.first_name = first_name
                 existing.membership = membership
+                existing.enrollment_type = enrollment_type
                 existing.active = True
                 if email:
                     existing.email = email
@@ -1184,6 +1192,7 @@ def upload_members():
                     last_name=last_name,
                     first_name=first_name,
                     membership=membership,
+                    enrollment_type=enrollment_type,
                     email=email if email else None,
                     active=True
                 )
@@ -1625,6 +1634,7 @@ with app.app_context():
         migrations = [
             "ALTER TABLE member ADD COLUMN IF NOT EXISTS email VARCHAR(200)",
             "ALTER TABLE reservation ADD COLUMN IF NOT EXISTS arrived BOOLEAN DEFAULT FALSE",
+            "ALTER TABLE member ADD COLUMN IF NOT EXISTS enrollment_type VARCHAR(20) NOT NULL DEFAULT 'Individual'",
         ]
         for sql in migrations:
             try:

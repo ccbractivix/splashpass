@@ -18,7 +18,8 @@
     <p class="text-muted small mb-2">
       Required: <code>owner_number</code>, <code>first_name</code>, <code>last_name</code><br>
       Membership: <code>membership</code>, <code>membership_level</code>, <code>level</code>, <code>tier</code>, <code>type</code>, or <code>pass_type</code><br>
-      Values: Platinum, Gold, Silver (partial matches like "Plat" work). Missing defaults to Silver.
+      Values: Platinum, Gold, Silver (partial matches like "Plat" work). Missing defaults to Silver.<br>
+      Optional: <code>enrollment_type</code> (defaults to Individual), <code>email</code>
     </p>
     <form action="{{ url_for('upload_members') }}" method="POST" enctype="multipart/form-data">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
