@@ -15,9 +15,7 @@
         <a class="nav-link text-white" href="/">Home</a>
         <a class="nav-link text-white" href="/book">Book</a>
         <a class="nav-link text-white" href="/lookup">Reservations</a>
-        {% if calendar_exists %}
         <a class="nav-link text-white" href="{{ url_for('calendar_view') }}">Calendar</a>
-        {% endif %}
       </div>
     </div>
   </nav>
