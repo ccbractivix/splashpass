@@ -458,18 +458,29 @@ def generate_calendar_png(year):
     return full_path, web_path
 
 # ---------------------------------------------------------------------------
-# Context processor — injects calendar flags into all templates
+# Context processor — injects calendar flags and login state into all templates
 # ---------------------------------------------------------------------------
 @app.context_processor
-def inject_calendar_flag():
+def inject_global_context():
     now = datetime.now(EASTERN)
     year = now.year
     web_path = os.path.join('static', 'calendars', f'{year}_web.png')
     full_path = os.path.join('static', 'calendars', f'{year}_full.png')
+
+    nav_member = None
+    member_id = session.get('member_id')
+    if member_id:
+        nav_member = Member.query.get(member_id)
+        if nav_member and not nav_member.active:
+            nav_member = None
+
     return dict(
         calendar_exists=os.path.exists(web_path),
         full_calendar_exists=os.path.exists(full_path),
-        current_year=year
+        current_year=year,
+        nav_member=nav_member,
+        nav_admin=session.get('admin_logged_in', False),
+        nav_checkin=session.get('checkin_logged_in', False),
     )
 
 # ---------------------------------------------------------------------------
