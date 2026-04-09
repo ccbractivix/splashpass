@@ -41,7 +41,10 @@
 {% block extra_js %}
 <script>
 (function(){
-  window.addEventListener('beforeunload',function(){navigator.sendBeacon('{{ url_for("checkin_beacon_logout") }}');});
+  var _nav=false;
+  document.addEventListener('click',function(e){var a=e.target.closest('a');if(a&&a.href&&a.href.startsWith(location.origin)&&!a.target&&!e.ctrlKey&&!e.metaKey&&!e.shiftKey)_nav=true;});
+  document.addEventListener('submit',function(){_nav=true;});
+  window.addEventListener('beforeunload',function(){if(!_nav)navigator.sendBeacon('{{ url_for("checkin_beacon_logout") }}');});
 })();
 </script>
 {% endblock %}

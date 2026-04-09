@@ -215,7 +215,10 @@
   function r(){clearTimeout(t);t=setTimeout(function(){window.location.href='{{ url_for("admin_logout") }}';},D);}
   ['mousemove','keydown','click','scroll','touchstart'].forEach(function(e){document.addEventListener(e,r);});
   r();
-  window.addEventListener('beforeunload',function(){navigator.sendBeacon('{{ url_for("admin_beacon_logout") }}');});
+  var _nav=false;
+  document.addEventListener('click',function(e){var a=e.target.closest('a');if(a&&a.href&&a.href.startsWith(location.origin)&&!a.target&&!e.ctrlKey&&!e.metaKey&&!e.shiftKey)_nav=true;});
+  document.addEventListener('submit',function(){_nav=true;});
+  window.addEventListener('beforeunload',function(){if(!_nav)navigator.sendBeacon('{{ url_for("admin_beacon_logout") }}');});
 })();
 </script>
 {% endblock %}
