@@ -47,6 +47,9 @@
 {% else %}
 <div class="alert alert-warning">
   No dates are currently available for your membership tier.
+  {% if member.membership in ['Gold', 'Silver'] %}
+  <br><strong>Gold and Silver reservations window is 7:00 am to 8:00 pm.</strong>
+  {% endif %}
 </div>
 <a href="{{ url_for('index') }}" class="btn btn-secondary">Back to Home</a>
 {% endif %}
