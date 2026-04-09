@@ -208,3 +208,14 @@
   </div>
 </form>
 {% endblock %}
+{% block extra_js %}
+<script>
+(function(){
+  var t,D=120000;
+  function r(){clearTimeout(t);t=setTimeout(function(){window.location.href='{{ url_for("admin_logout") }}';},D);}
+  ['mousemove','keydown','click','scroll','touchstart'].forEach(function(e){document.addEventListener(e,r);});
+  r();
+  window.addEventListener('beforeunload',function(){navigator.sendBeacon('{{ url_for("admin_beacon_logout") }}');});
+})();
+</script>
+{% endblock %}

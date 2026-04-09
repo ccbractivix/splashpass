@@ -26,6 +26,7 @@
 <div class="alert alert-info">
   Welcome, <strong>{{ member.first_name }} {{ member.last_name }}</strong>
   — {{ member.membership }} Member
+  <a href="{{ url_for('member_logout') }}" class="btn btn-sm btn-outline-secondary ms-2">Logout</a>
 </div>
 
 {% if available_dates %}
@@ -70,5 +71,18 @@
 </div>
 <a href="{{ url_for('book') }}" class="btn btn-secondary">Start Over</a>
 {% endif %}
+{% endif %}
+{% endblock %}
+{% block extra_js %}
+{% if member %}
+<script>
+(function(){
+  var t,D=120000;
+  function r(){clearTimeout(t);t=setTimeout(function(){window.location.href='{{ url_for("member_logout") }}';},D);}
+  ['mousemove','keydown','click','scroll','touchstart'].forEach(function(e){document.addEventListener(e,r);});
+  r();
+  window.addEventListener('beforeunload',function(){navigator.sendBeacon('{{ url_for("member_beacon_logout") }}');});
+})();
+</script>
 {% endif %}
 {% endblock %}

@@ -98,3 +98,10 @@
   <div class="alert alert-info">No reservations for today.</div>
 {% endif %}
 {% endblock %}
+{% block extra_js %}
+<script>
+(function(){
+  window.addEventListener('beforeunload',function(){navigator.sendBeacon('{{ url_for("checkin_beacon_logout") }}');});
+})();
+</script>
+{% endblock %}

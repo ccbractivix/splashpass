@@ -124,6 +124,49 @@ def checkin_required(f):
         return f(*args, **kwargs)
     return decorated
 
+def get_member_available_dates(member):
+    """Return list of available dates for a verified member."""
+    today = today_eastern()
+    tier = member.membership
+
+    if tier == 'Platinum':
+        max_date = today + timedelta(days=6)
+    elif tier in ('Gold', 'Silver'):
+        max_date = today
+    else:
+        return []
+
+    # Pre-fetch existing reservations for this member in the date range
+    existing_dates = {
+        r.reservation_date for r in Reservation.query.filter(
+            Reservation.member_id == member.id,
+            Reservation.reservation_date >= today,
+            Reservation.reservation_date <= max_date
+        ).all()
+    }
+
+    available_dates = []
+    for i in range((max_date - today).days + 1):
+        d = today + timedelta(days=i)
+        day_type, capacity = get_day_info(d)
+
+        if tier == 'Silver' and day_type != 'Weekday':
+            continue
+        if tier == 'Gold' and day_type == 'High Use':
+            continue
+
+        used = get_capacity_used(d)
+        remaining = capacity - used
+        if remaining > 0:
+            if d in existing_dates:
+                continue
+            available_dates.append({
+                'date': d,
+                'day_type': day_type,
+                'remaining': remaining
+            })
+    return available_dates
+
 def send_problem_report_email(name, owner_number, contact, message):
     sg = sendgrid.SendGridAPIClient(api_key=os.environ.get('SENDGRID_API_KEY'))
     from_email = Email(os.environ.get('MAIL_FROM', 'noreply@ccbrsplashpass.com'))
@@ -433,6 +476,14 @@ def index():
 @app.route('/book', methods=['GET', 'POST'])
 def book():
     if request.method == 'GET':
+        member_id = session.get('member_id')
+        if member_id:
+            member = Member.query.get(member_id)
+            if member and member.active:
+                available_dates = get_member_available_dates(member)
+                return render_template('book.html', member=member, available_dates=available_dates)
+            else:
+                session.pop('member_id', None)
         return render_template('book.html')
 
     owner_number = request.form.get('owner_number', '').strip()
@@ -451,41 +502,9 @@ def book():
         flash('Account not found. Please check your Owner Number and Last Name and try again.' + REPORT_LINK, 'danger')
         return render_template('book.html')
 
-    today = today_eastern()
-    tier = member.membership
+    session['member_id'] = member.id
 
-    if tier == 'Platinum':
-        max_date = today + timedelta(days=6)
-    elif tier == 'Gold':
-        max_date = today
-    elif tier == 'Silver':
-        max_date = today
-    else:
-        flash('Unknown membership tier.' + REPORT_LINK, 'danger')
-        return render_template('book.html')
-
-    available_dates = []
-    for i in range((max_date - today).days + 1):
-        d = today + timedelta(days=i)
-        day_type, capacity = get_day_info(d)
-
-        if tier == 'Silver' and day_type != 'Weekday':
-            continue
-        if tier == 'Gold' and day_type == 'High Use':
-            continue
-
-        used = get_capacity_used(d)
-        remaining = capacity - used
-        if remaining > 0:
-            existing = Reservation.query.filter_by(
-                member_id=member.id, reservation_date=d).first()
-            if existing:
-                continue
-            available_dates.append({
-                'date': d,
-                'day_type': day_type,
-                'remaining': remaining
-            })
+    available_dates = get_member_available_dates(member)
 
     return render_template('book.html', member=member, available_dates=available_dates)
 
@@ -660,6 +679,18 @@ def terms():
 @app.route('/lookup', methods=['GET', 'POST'])
 def lookup():
     if request.method == 'GET':
+        member_id = session.get('member_id')
+        if member_id:
+            member = Member.query.get(member_id)
+            if member and member.active:
+                today = today_eastern()
+                reservations = Reservation.query.filter(
+                    Reservation.member_id == member.id,
+                    Reservation.reservation_date >= today
+                ).order_by(Reservation.reservation_date).all()
+                return render_template('lookup.html', member=member, reservations=reservations)
+            else:
+                session.pop('member_id', None)
         return render_template('lookup.html')
 
     owner_number = request.form.get('owner_number', '').strip()
@@ -677,6 +708,8 @@ def lookup():
     if member.last_name.strip().lower() != last_name.lower():
         flash('Account not found. Please check your Owner Number and Last Name and try again.' + REPORT_LINK, 'danger')
         return render_template('lookup.html')
+
+    session['member_id'] = member.id
 
     today = today_eastern()
     reservations = Reservation.query.filter(
@@ -699,6 +732,19 @@ def cancel_reservation(res_id):
     db.session.commit()
     flash('Reservation cancelled.', 'success')
     return redirect(url_for('lookup'))
+
+@app.route('/member/logout')
+def member_logout():
+    session.pop('member_id', None)
+    session.pop('pending_reservation', None)
+    return redirect(url_for('index'))
+
+@app.route('/member/beacon-logout', methods=['POST'])
+@csrf.exempt
+def member_beacon_logout():
+    session.pop('member_id', None)
+    session.pop('pending_reservation', None)
+    return '', 204
 
 @app.route('/report', methods=['GET'])
 def report_form():
@@ -839,6 +885,12 @@ def checkin_logout():
     session.pop('checkin_logged_in', None)
     return redirect(url_for('checkin_login'))
 
+@app.route('/checkin/beacon-logout', methods=['POST'])
+@csrf.exempt
+def checkin_beacon_logout():
+    session.pop('checkin_logged_in', None)
+    return '', 204
+
 @app.route('/checkin')
 @app.route('/checkin/dashboard')
 @checkin_required
@@ -921,6 +973,12 @@ def admin_login():
 def admin_logout():
     session.pop('admin_logged_in', None)
     return redirect(url_for('admin_login'))
+
+@app.route('/admin/beacon-logout', methods=['POST'])
+@csrf.exempt
+def admin_beacon_logout():
+    session.pop('admin_logged_in', None)
+    return '', 204
 
 @app.route('/admin')
 @app.route('/admin/dashboard')
