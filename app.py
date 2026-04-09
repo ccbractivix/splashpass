@@ -124,6 +124,11 @@ def checkin_required(f):
         return f(*args, **kwargs)
     return decorated
 
+def is_gold_silver_blocked():
+    """Return True if current Eastern time is outside 7 AM – 8 PM."""
+    hour = now_eastern().hour
+    return hour < 7 or hour >= 20
+
 def get_member_available_dates(member):
     """Return list of available dates for a verified member."""
     today = today_eastern()
@@ -132,6 +137,8 @@ def get_member_available_dates(member):
     if tier == 'Platinum':
         max_date = today + timedelta(days=6)
     elif tier in ('Gold', 'Silver'):
+        if is_gold_silver_blocked():
+            return []
         max_date = today
     else:
         return []
@@ -163,7 +170,6 @@ def get_member_available_dates(member):
             available_dates.append({
                 'date': d,
                 'day_type': day_type,
-                'remaining': remaining
             })
     return available_dates
 
@@ -536,9 +542,15 @@ def reserve():
         if res_date != today:
             flash('Gold members can only book same-day.' + REPORT_LINK, 'danger')
             return redirect(url_for('book'))
+        if is_gold_silver_blocked():
+            flash('Gold members can only book between 7:00 AM and 8:00 PM.' + REPORT_LINK, 'danger')
+            return redirect(url_for('book'))
     elif tier == 'Silver':
         if res_date != today:
             flash('Silver members can only book same-day.' + REPORT_LINK, 'danger')
+            return redirect(url_for('book'))
+        if is_gold_silver_blocked():
+            flash('Silver members can only book between 7:00 AM and 8:00 PM.' + REPORT_LINK, 'danger')
             return redirect(url_for('book'))
     else:
         flash('Unknown membership tier.' + REPORT_LINK, 'danger')
@@ -636,6 +648,10 @@ def terms():
         if res_date != today:
             session.pop('pending_reservation', None)
             flash('This date is no longer available for same-day booking. Please start over.', 'danger')
+            return redirect(url_for('book'))
+        if is_gold_silver_blocked():
+            session.pop('pending_reservation', None)
+            flash('Reservations for Gold and Silver members are only available between 7:00 AM and 8:00 PM. Please try again later.', 'danger')
             return redirect(url_for('book'))
 
     code = generate_code()

@@ -25,7 +25,6 @@
           <option value="{{ d.date.isoformat() }}">
             {{ d.date.strftime('%A, %B %-d, %Y') }}
             — {{ d.day_type }}
-            ({{ d.remaining }} spots left)
           </option>
           {% endfor %}
         </select>
@@ -59,7 +58,6 @@
   function r(){clearTimeout(t);t=setTimeout(function(){window.location.href='{{ url_for("member_logout") }}';},D);}
   ['mousemove','keydown','click','scroll','touchstart'].forEach(function(e){document.addEventListener(e,r);});
   r();
-  window.addEventListener('beforeunload',function(){navigator.sendBeacon('{{ url_for("member_beacon_logout") }}');});
 })();
 </script>
 {% endblock %}

@@ -111,9 +111,6 @@
       document.addEventListener(e, resetInactivityTimer);
     });
     resetInactivityTimer();
-    window.addEventListener('beforeunload', function(){
-      navigator.sendBeacon('{{ url_for("member_beacon_logout") }}');
-    });
   }
 
   // --- Login modal ---
