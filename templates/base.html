@@ -16,6 +16,33 @@
       </button>
       <div class="collapse navbar-collapse" id="mainNavbar">
         <ul class="navbar-nav ms-auto">
+          {% if nav_admin %}
+          {# ── Admin navigation ── #}
+          <li class="nav-item">
+            <a class="nav-link" href="{{ url_for('admin_dashboard') }}"><i class="bi bi-speedometer2"></i> Dashboard</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" href="{{ url_for('admin_members') }}"><i class="bi bi-people-fill"></i> Members</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" href="{{ url_for('admin_calendar') }}"><i class="bi bi-calendar3"></i> Calendar</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" href="{{ url_for('admin_report') }}"><i class="bi bi-bar-chart-line"></i> Report</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" href="{{ url_for('admin_logout') }}"><i class="bi bi-box-arrow-right"></i> Logout</a>
+          </li>
+          {% elif nav_checkin %}
+          {# ── Check-in staff navigation ── #}
+          <li class="nav-item">
+            <a class="nav-link" href="{{ url_for('checkin_dashboard') }}"><i class="bi bi-speedometer2"></i> Dashboard</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" href="{{ url_for('checkin_logout') }}"><i class="bi bi-box-arrow-right"></i> Logout</a>
+          </li>
+          {% else %}
+          {# ── Member / public navigation ── #}
           <li class="nav-item">
             <a class="nav-link" href="/">Home</a>
           </li>
@@ -28,6 +55,12 @@
           <li class="nav-item">
             <a class="nav-link" href="{{ url_for('calendar_view') }}">Calendar</a>
           </li>
+          {% if nav_member %}
+          <li class="nav-item">
+            <a class="nav-link" href="{{ url_for('member_logout') }}"><i class="bi bi-box-arrow-right"></i> Logout</a>
+          </li>
+          {% endif %}
+          {% endif %}
         </ul>
       </div>
     </div>
