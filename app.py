@@ -1,4 +1,4 @@
-import os, io, csv, base64, string, random, calendar as cal_module
+import os, io, csv, base64, string, random, re, calendar as cal_module
 from datetime import datetime, timedelta, date
 from functools import wraps
 
@@ -763,8 +763,8 @@ def send_confirmation_email_route():
     email = (request.form.get('email') or '').strip()
     confirmation_code = (request.form.get('confirmation_code') or '').strip()
 
-    if not email:
-        return jsonify({'success': False, 'message': 'Please enter an email address.'}), 400
+    if not email or not re.match(r'^[^@\s]+@[^@\s]+\.[^@\s]+$', email):
+        return jsonify({'success': False, 'message': 'Please enter a valid email address.'}), 400
     if not confirmation_code:
         return jsonify({'success': False, 'message': 'Missing confirmation code.'}), 400
 

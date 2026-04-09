@@ -60,7 +60,7 @@ document.getElementById('email-form').addEventListener('submit', function(e){
 
   var fd = new FormData();
   fd.append('email', email);
-  fd.append('confirmation_code', '{{ reservation.confirmation_code }}');
+  fd.append('confirmation_code', {{ reservation.confirmation_code|tojson }});
   fd.append('csrf_token', '{{ csrf_token() }}');
 
   window._nav = true;
