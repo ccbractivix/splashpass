@@ -756,7 +756,7 @@ def report_submit():
         if is_ajax:
             session.pop('member_id', None)
             session.pop('pending_reservation', None)
-            return jsonify({'success': True, 'message': 'Your report has been submitted. We will be in touch soon. You will be logged out shortly.'})
+            return jsonify({'success': False, 'message': 'There was a problem sending your report. Please try again later.'}), 500
         flash('There was a problem sending your report. Please try again later.', 'danger')
 
     return redirect(url_for('report_form'))
