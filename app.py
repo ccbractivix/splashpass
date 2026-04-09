@@ -66,7 +66,7 @@ class DayType(db.Model):
 
 class Reservation(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    confirmation_code = db.Column(db.String(8), unique=True, nullable=False)
+    confirmation_code = db.Column(db.String(20), unique=True, nullable=False)
     member_id = db.Column(db.Integer, db.ForeignKey('member.id'), nullable=False)
     reservation_date = db.Column(db.Date, nullable=False)
     party_size = db.Column(db.Integer, nullable=False)
@@ -88,6 +88,14 @@ def generate_code():
     chars = string.ascii_uppercase + string.digits
     while True:
         code = ''.join(random.choices(chars, k=8))
+        if not Reservation.query.filter_by(confirmation_code=code).first():
+            return code
+
+def generate_est_code():
+    """Generate an Employee Splash Time confirmation code: EST. + 6 chars."""
+    chars = string.ascii_uppercase + string.digits
+    while True:
+        code = 'EST.' + ''.join(random.choices(chars, k=6))
         if not Reservation.query.filter_by(confirmation_code=code).first():
             return code
 
@@ -1100,6 +1108,84 @@ def admin_export():
         headers={'Content-Disposition': f'attachment; filename=reservations_{export_date}.csv'}
     )
 
+# ---- Employee Splash Time ----
+
+@app.route('/admin/employee-splash-time', methods=['GET', 'POST'])
+@admin_required
+def employee_splash_time():
+    if request.method == 'GET':
+        return render_template('admin/employee_splash_time.html')
+
+    # --- process POST ---
+    last_name = (request.form.get('last_name') or '').strip()
+    first_name = (request.form.get('first_name') or '').strip()
+    reservation_date_str = request.form.get('reservation_date', '')
+    party_size_str = request.form.get('party_size', '')
+
+    if not last_name or not first_name:
+        flash('Last name and first name are required.', 'danger')
+        return render_template('admin/employee_splash_time.html')
+
+    try:
+        res_date = datetime.strptime(reservation_date_str, '%Y-%m-%d').date()
+    except ValueError:
+        flash('Please select a valid date.', 'danger')
+        return render_template('admin/employee_splash_time.html')
+
+    try:
+        party_size = int(party_size_str)
+        if party_size < 1 or party_size > 6:
+            raise ValueError
+    except (ValueError, TypeError):
+        flash('Party size must be between 1 and 6.', 'danger')
+        return render_template('admin/employee_splash_time.html')
+
+    today = today_eastern()
+    max_date = today + timedelta(days=183)  # ~6 months
+
+    if res_date < today:
+        flash('Cannot make a reservation in the past.', 'danger')
+        return render_template('admin/employee_splash_time.html')
+    if res_date > max_date:
+        flash('Employee Splash Time reservations can only be made up to 6 months in advance.', 'danger')
+        return render_template('admin/employee_splash_time.html')
+
+    day_type, capacity = get_day_info(res_date)
+    if day_type == 'High Use':
+        flash('Employee Splash Time is not available on High Use days.', 'danger')
+        return render_template('admin/employee_splash_time.html')
+
+    used = get_capacity_used(res_date)
+    if used + party_size > capacity:
+        flash('Not enough capacity for that date and party size.', 'danger')
+        return render_template('admin/employee_splash_time.html')
+
+    code = generate_est_code()
+
+    # Create a lightweight member record to link the reservation
+    emp_member = Member(
+        owner_number=code,
+        last_name=last_name,
+        first_name=first_name,
+        enrollment_type='Employee',
+        membership='Employee',
+        active=True
+    )
+    db.session.add(emp_member)
+    db.session.flush()  # get emp_member.id
+
+    reservation = Reservation(
+        confirmation_code=code,
+        member_id=emp_member.id,
+        reservation_date=res_date,
+        party_size=party_size
+    )
+    db.session.add(reservation)
+    db.session.commit()
+
+    return render_template('admin/employee_splash_time.html',
+                           confirmation=reservation)
+
 @app.route('/admin/members')
 @admin_required
 def admin_members():
@@ -1172,7 +1258,8 @@ def upload_members():
         # Deactivate all existing members; members present in the CSV
         # will be reactivated (or created) below.  Reservations are
         # intentionally left untouched so upcoming bookings survive.
-        Member.query.update({Member.active: False})
+        # Employee members (created via Employee Splash Time) are excluded.
+        Member.query.filter(Member.membership != 'Employee').update({Member.active: False})
 
         count = 0
         skipped = 0
@@ -1670,6 +1757,7 @@ with app.app_context():
             "ALTER TABLE member ADD COLUMN IF NOT EXISTS email VARCHAR(200)",
             "ALTER TABLE reservation ADD COLUMN IF NOT EXISTS arrived BOOLEAN DEFAULT FALSE",
             "ALTER TABLE member ADD COLUMN IF NOT EXISTS enrollment_type VARCHAR(20) NOT NULL DEFAULT 'Individual'",
+            "ALTER TABLE reservation ALTER COLUMN confirmation_code TYPE VARCHAR(20)",
         ]
         for sql in migrations:
             try:
