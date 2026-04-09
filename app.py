@@ -1169,14 +1169,15 @@ def upload_members():
             flash(f'Could not find name columns. Headers found: {raw_headers}', 'danger')
             return redirect(url_for('admin_members'))
 
-        # Purge existing members (and their reservations) so the
-        # uploaded list fully replaces the old one.
-        Reservation.query.delete()
-        Member.query.delete()
+        # Deactivate all existing members; members present in the CSV
+        # will be reactivated (or created) below.  Reservations are
+        # intentionally left untouched so upcoming bookings survive.
+        Member.query.update({Member.active: False})
 
         count = 0
         skipped = 0
         no_tier = 0
+        updated = 0
 
         for row in reader:
             owner_number = (row.get(owner_col) or '').strip()
@@ -1210,21 +1211,32 @@ def upload_members():
 
             email = (row.get(email_col) or '').strip() if email_col else ''
 
-            m = Member(
-                owner_number=owner_number,
-                last_name=last_name,
-                first_name=first_name,
-                membership=membership,
-                enrollment_type=enrollment_type,
-                email=email if email else None,
-                active=True
-            )
-            db.session.add(m)
+            existing = Member.query.filter_by(owner_number=owner_number).first()
+            if existing:
+                existing.first_name = first_name
+                existing.last_name = last_name
+                existing.membership = membership
+                existing.enrollment_type = enrollment_type
+                existing.email = email if email else None
+                existing.active = True
+                updated += 1
+            else:
+                m = Member(
+                    owner_number=owner_number,
+                    last_name=last_name,
+                    first_name=first_name,
+                    membership=membership,
+                    enrollment_type=enrollment_type,
+                    email=email if email else None,
+                    active=True
+                )
+                db.session.add(m)
             count += 1
 
         db.session.commit()
 
-        msg = f'Loaded {count} members.'
+        new_count = count - updated
+        msg = f'Loaded {count} members ({updated} updated, {new_count} new).'
         if skipped:
             msg += f' Skipped {skipped} rows (missing data).'
         if mem_col:
