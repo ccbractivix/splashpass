@@ -11,6 +11,22 @@
   <nav class="navbar navbar-expand-md navbar-dark bg-primary">
     <div class="container">
       <a class="navbar-brand" href="/">🏊 SplashPass</a>
+      {% if nav_member %}
+      {# ── Member navigation: kebab dropdown ── #}
+      <div class="dropdown ms-auto">
+        <button class="btn btn-link nav-link text-white p-0" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Member navigation menu">
+          <i class="bi bi-three-dots-vertical" style="font-size: 1.5rem;"></i>
+        </button>
+        <ul class="dropdown-menu dropdown-menu-end">
+          <li><a class="dropdown-item" href="{{ url_for('book') }}">Book</a></li>
+          <li><a class="dropdown-item" href="{{ url_for('lookup') }}">Reservations</a></li>
+          <li><a class="dropdown-item" href="{{ url_for('calendar_view') }}">Calendar</a></li>
+          <li><a class="dropdown-item" href="{{ url_for('index') }}">Home</a></li>
+          <li><hr class="dropdown-divider"></li>
+          <li><a class="dropdown-item" href="{{ url_for('member_logout') }}"><i class="bi bi-box-arrow-right"></i> Logout</a></li>
+        </ul>
+      </div>
+      {% else %}
       <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNavbar" aria-controls="mainNavbar" aria-expanded="false" aria-label="Toggle navigation">
         <span class="navbar-toggler-icon"></span>
       </button>
@@ -42,7 +58,7 @@
             <a class="nav-link" href="{{ url_for('checkin_logout') }}"><i class="bi bi-box-arrow-right"></i> Logout</a>
           </li>
           {% else %}
-          {# ── Member / public navigation ── #}
+          {# ── Public navigation ── #}
           <li class="nav-item">
             <a class="nav-link" href="/">Home</a>
           </li>
@@ -55,14 +71,10 @@
           <li class="nav-item">
             <a class="nav-link" href="{{ url_for('calendar_view') }}">Calendar</a>
           </li>
-          {% if nav_member %}
-          <li class="nav-item">
-            <a class="nav-link" href="{{ url_for('member_logout') }}"><i class="bi bi-box-arrow-right"></i> Logout</a>
-          </li>
-          {% endif %}
           {% endif %}
         </ul>
       </div>
+      {% endif %}
     </div>
   </nav>
 
