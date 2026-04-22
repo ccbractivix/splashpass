@@ -828,6 +828,20 @@ def report_submit():
     return redirect(url_for('report_form'))
 
 # ---------------------------------------------------------------------------
+# Pool FAQ
+# ---------------------------------------------------------------------------
+@app.route('/pool-faq')
+def pool_faq():
+    return render_template('pool_faq.html')
+
+# ---------------------------------------------------------------------------
+# Weather Protocols
+# ---------------------------------------------------------------------------
+@app.route('/weather-protocols')
+def weather_protocols():
+    return render_template('weather_protocols.html')
+
+# ---------------------------------------------------------------------------
 # Public calendar routes
 # ---------------------------------------------------------------------------
 @app.route('/calendar')

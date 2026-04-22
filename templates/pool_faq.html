@@ -1,0 +1,190 @@
+{% extends "base.html" %}
+{% block title %}Pool FAQ — SplashPass{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+
+        <div class="card shadow">
+            <div class="card-header bg-primary text-white">
+                <h4 class="mb-0"><i class="bi bi-question-circle"></i> Pool FAQ</h4>
+            </div>
+            <div class="card-body">
+
+                <div class="accordion" id="poolFaqAccordion">
+
+                    <div class="accordion-item">
+                        <h2 class="accordion-header" id="faq1">
+                            <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#ans1" aria-expanded="true" aria-controls="ans1">
+                                When is the pool open?
+                            </button>
+                        </h2>
+                        <div id="ans1" class="accordion-collapse collapse show" aria-labelledby="faq1" data-bs-parent="#poolFaqAccordion">
+                            <div class="accordion-body">
+                                <p>See the <strong>Current Pool Operation Status</strong> report above.</p>
+                                <p>Pools and water facilities are subject to closure in certain weather conditions, particularly lightning. If the staff inform you that the pool is closing for lightning, please gather your belongings and exit the pool deck. Items left behind may be damaged by rain or lightning and may be turned in to lost and found.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="accordion-item">
+                        <h2 class="accordion-header" id="faq2">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#ans2" aria-expanded="false" aria-controls="ans2">
+                                When is the waterslide open?
+                            </button>
+                        </h2>
+                        <div id="ans2" class="accordion-collapse collapse" aria-labelledby="faq2" data-bs-parent="#poolFaqAccordion">
+                            <div class="accordion-body">
+                                <p>See the <strong>Current Pool Operation Status</strong> report above.</p>
+                                <p>The flag at the top of the tower indicates the slide's status. If the <span class="badge bg-danger">RED</span> flag is posted, the slide is closed. When the <span class="badge bg-success">GREEN</span> flag is posted, the slide is open!</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="accordion-item">
+                        <h2 class="accordion-header" id="faq3">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#ans3" aria-expanded="false" aria-controls="ans3">
+                                What are the waterslide rules?
+                            </button>
+                        </h2>
+                        <div id="ans3" class="accordion-collapse collapse" aria-labelledby="faq3" data-bs-parent="#poolFaqAccordion">
+                            <div class="accordion-body">
+                                <ul>
+                                    <li>All riders must be wearing resort bands. If you're not wearing a resort band, you will be sent back to get your band.</li>
+                                    <li>Single riders only — no tandem rides. This includes small children or children with parents.</li>
+                                    <li>Ride feet-forward, face-forward. Do not attempt to turn yourself in the slide.</li>
+                                    <li>Follow all instructions from the ride attendant.</li>
+                                    <li>The slide may close at any time for weather or any safety cause as determined by the staff.</li>
+                                </ul>
+                                <div class="alert alert-info mb-0">
+                                    Because your health and safety remain our top priority, sanitizing wipes are provided for your convenience while visiting the pool. Sanitizing Stations are located under the AED at the pool restrooms at both pools.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="accordion-item">
+                        <h2 class="accordion-header" id="faq4">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#ans4" aria-expanded="false" aria-controls="ans4">
+                                I was given wristbands — do I really need them?
+                            </button>
+                        </h2>
+                        <div id="ans4" class="accordion-collapse collapse" aria-labelledby="faq4" data-bs-parent="#poolFaqAccordion">
+                            <div class="accordion-body">
+                                <p><strong>Yes!</strong> Wristbands/resort bands must be worn at all times while on resort property. Everyone in your party must be wearing a wristband/resort band while on property, to include the pool area.</p>
+                                <p>Dressing up and leaving property? We're happy to replace the band when you return your cut band to the front desk! If you have lost or broken a resort band, you may go to the front desk to obtain a replacement.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="accordion-item">
+                        <h2 class="accordion-header" id="faq5">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#ans5" aria-expanded="false" aria-controls="ans5">
+                                Where do I pick up pool towels?
+                            </button>
+                        </h2>
+                        <div id="ans5" class="accordion-collapse collapse" aria-labelledby="faq5" data-bs-parent="#poolFaqAccordion">
+                            <div class="accordion-body">
+                                <p>Club rules require members to provide their own towels for use at the pools and beach.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="accordion-item">
+                        <h2 class="accordion-header" id="faq6">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#ans6" aria-expanded="false" aria-controls="ans6">
+                                Can I bring my own pool floats?
+                            </button>
+                        </h2>
+                        <div id="ans6" class="accordion-collapse collapse" aria-labelledby="faq6" data-bs-parent="#poolFaqAccordion">
+                            <div class="accordion-body">
+                                <p>Our pool rules state that <strong>no floats of any kind are permitted in the pools</strong>. The lone exception is 'water wings' and similar devices for young children in order to maintain balance.</p>
+                                <p>Personal tubes are not permitted for use in the lazy river. Please use only one tube per person when visiting the lazy river to assure that there are enough tubes available for all guests who wish to use the amenity.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="accordion-item">
+                        <h2 class="accordion-header" id="faq7">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#ans7" aria-expanded="false" aria-controls="ans7">
+                                Can I bring my own food and beverages?
+                            </button>
+                        </h2>
+                        <div id="ans7" class="accordion-collapse collapse" aria-labelledby="faq7" data-bs-parent="#poolFaqAccordion">
+                            <div class="accordion-body">
+                                <p>Personal size coolers only may be brought into the pool deck. Food and beverages are available for purchase at the Tiki Bar at the Main Pool. Larger coolers should be stored in your villa or vehicle — please do not leave them outside the pool gates where other people can help themselves.</p>
+                                <p>Coolers found outside the gates may have a courtesy notice inserted explaining the need to return the cooler to a villa or vehicle. Coolers unmoved after 1 hour will be taken to the front desk for storage.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="accordion-item">
+                        <h2 class="accordion-header" id="faq8">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#ans8" aria-expanded="false" aria-controls="ans8">
+                                Can I bring a beverage into the pool?
+                            </button>
+                        </h2>
+                        <div id="ans8" class="accordion-collapse collapse" aria-labelledby="faq8" data-bs-parent="#poolFaqAccordion">
+                            <div class="accordion-body">
+                                <p>Local health code for commercial pools prohibits food or drink in the pool or on the wet deck. No items may be left near the edge of the water, or in any walkway where it might become a tripping hazard.</p>
+                                <div class="alert alert-warning mb-0">
+                                    <i class="bi bi-exclamation-triangle-fill"></i> <strong>Note:</strong> It is hazardous to consume alcohol before or while using a hot tub.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="accordion-item">
+                        <h2 class="accordion-header" id="faq9">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#ans9" aria-expanded="false" aria-controls="ans9">
+                                Where is the smoking area?
+                            </button>
+                        </h2>
+                        <div id="ans9" class="accordion-collapse collapse" aria-labelledby="faq9" data-bs-parent="#poolFaqAccordion">
+                            <div class="accordion-body">
+                                <p>Both of our pools are <strong>smoke-free</strong>. Smokers will need to exit the pool deck to smoke.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="accordion-item">
+                        <h2 class="accordion-header" id="faq10">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#ans10" aria-expanded="false" aria-controls="ans10">
+                                What is the Signature Pool (The Quiet Pool)?
+                            </button>
+                        </h2>
+                        <div id="ans10" class="accordion-collapse collapse" aria-labelledby="faq10" data-bs-parent="#poolFaqAccordion">
+                            <div class="accordion-body">
+                                <p>The <strong>Signature Pool</strong> is 'The Quiet Pool,' and is available to all guests. Located at Building Three, this pool is intended as a quiet "oasis" pool. All guests and all ages are welcome — we ask only that everyone observe a few basic guidelines:</p>
+                                <ul>
+                                    <li>Anyone under the age of 12 years must be accompanied by an adult (family member, guardian, or babysitter).</li>
+                                    <li>Personal conduct must be such that the safety of self and others is preserved.</li>
+                                    <li>As this is the quiet pool, there is no throwing balls or other items.</li>
+                                    <li>Rough play and intentional splashing is not permitted.</li>
+                                    <li>Electronic audio devices are permitted through ear buds/earphones &amp; kept at a low volume.</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="accordion-item">
+                        <h2 class="accordion-header" id="faq11">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#ans11" aria-expanded="false" aria-controls="ans11">
+                                Can I bring my loudspeaker to the pool?
+                            </button>
+                        </h2>
+                        <div id="ans11" class="accordion-collapse collapse" aria-labelledby="faq11" data-bs-parent="#poolFaqAccordion">
+                            <div class="accordion-body">
+                                <p>Please don't bring any speakers to the pools. We have a PA system that plays music at the pool decks all day. If you bring a speaker to the pool, you will be asked to remove it.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                </div><!-- /accordion -->
+
+            </div>
+        </div>
+
+    </div>
+</div>
+{% endblock %}
