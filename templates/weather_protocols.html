@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Weather Protocols — SplashPass{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+
+        <div class="card shadow">
+            <div class="card-header bg-primary text-white">
+                <h4 class="mb-0"><i class="bi bi-cloud-lightning-rain"></i> Weather Protocols</h4>
+            </div>
+            <div class="card-body">
+
+                <!-- Lightning -->
+                <h5 class="fw-bold mt-2"><i class="bi bi-lightning-charge-fill text-warning"></i> Lightning</h5>
+                <p>The current safety standards in place for our outdoor pools, water slide, and guest tram operations are:</p>
+
+                <div class="table-responsive mb-3">
+                    <table class="table table-bordered align-middle">
+                        <thead class="table-primary">
+                            <tr>
+                                <th>Distance</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>Within 20 miles</strong></td>
+                                <td>The water slide will be closed and immediately vacated.</td>
+                            </tr>
+                            <tr class="table-warning">
+                                <td><strong>Within 15 miles</strong></td>
+                                <td>We suggest that guests begin to exit the pool decks and our resort team will start closing procedures.</td>
+                            </tr>
+                            <tr class="table-danger">
+                                <td><strong>Within 10 miles</strong></td>
+                                <td>Pool decks will be closed and all guests will be required to exit immediately. The guest tram will be suspended after 20–30 minutes of operation and conducting rounds to return guests to their buildings.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle-fill"></i>
+                    We will reopen the pool deck and resume tram operations after lightning has cleared a 10-mile radius <strong>and</strong> 30 minutes has passed since the last lightning strike. The 30-minute count cannot begin until the pool deck has been cleared — your cooperation in clearing the deck is essential.
+                    <br><br>
+                    Please refer to the <strong>scoreboard at the top of this page</strong> for status updates.
+                </div>
+
+                <hr>
+
+                <!-- Wind -->
+                <h5 class="fw-bold mt-3"><i class="bi bi-wind text-info"></i> Wind</h5>
+                <ul>
+                    <li><strong>Constant 18 mph or gusting at 23 mph or higher:</strong> The Water Slide must be closed.</li>
+                    <li><strong>26 mph or higher:</strong> The pool deck must be closed &amp; guest tram service must be suspended due to the potential safety hazard of flying debris.</li>
+                </ul>
+
+                <hr>
+
+                <!-- Temperature -->
+                <h5 class="fw-bold mt-3"><i class="bi bi-thermometer-low text-primary"></i> Temperature</h5>
+                <ul>
+                    <li><strong>Below 50°F:</strong> The slide will not be in operation.</li>
+                    <li>Pool technicians will make a determination on the operation of pools based on ambient water temperatures.</li>
+                </ul>
+
+            </div>
+        </div>
+
+    </div>
+</div>
+{% endblock %}
