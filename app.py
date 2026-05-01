@@ -1025,6 +1025,80 @@ def checkin_toggle(res_id):
         flash(f'{"Checked in" if reservation.arrived else "Check-in removed"}: {reservation.confirmation_code}', 'success')
     return redirect(url_for('checkin_dashboard'))
 
+@app.route('/checkin/operator-entry', methods=['GET', 'POST'])
+@checkin_required
+def checkin_operator_entry():
+    if request.method == 'GET':
+        return render_template('checkin/operator_entry.html')
+
+    # --- process POST ---
+    last_name = (request.form.get('last_name') or '').strip()
+    first_name = (request.form.get('first_name') or '').strip()
+    reservation_date_str = request.form.get('reservation_date', '')
+    party_size_str = request.form.get('party_size', '')
+
+    if not last_name or not first_name:
+        flash('Last name and first name are required.', 'danger')
+        return render_template('checkin/operator_entry.html')
+
+    try:
+        res_date = datetime.strptime(reservation_date_str, '%Y-%m-%d').date()
+    except ValueError:
+        flash('Please select a valid date.', 'danger')
+        return render_template('checkin/operator_entry.html')
+
+    try:
+        party_size = int(party_size_str)
+        if party_size < 1 or party_size > 6:
+            raise ValueError
+    except (ValueError, TypeError):
+        flash('Party size must be between 1 and 6.', 'danger')
+        return render_template('checkin/operator_entry.html')
+
+    today = today_eastern()
+    max_date = today + timedelta(days=EST_MAX_ADVANCE_DAYS)
+
+    if res_date < today:
+        flash('Cannot make a reservation in the past.', 'danger')
+        return render_template('checkin/operator_entry.html')
+    if res_date > max_date:
+        flash('Employee Splash Time reservations can only be made up to 6 months in advance.', 'danger')
+        return render_template('checkin/operator_entry.html')
+
+    day_type, capacity = get_day_info(res_date)
+    if day_type == 'High Use':
+        flash('Employee Splash Time is not available on High Use days.', 'danger')
+        return render_template('checkin/operator_entry.html')
+
+    used = get_capacity_used(res_date)
+    if used + party_size > capacity:
+        flash('Not enough capacity for that date and party size.', 'danger')
+        return render_template('checkin/operator_entry.html')
+
+    code = generate_est_code()
+
+    emp_member = Member(
+        owner_number=code,
+        last_name=last_name,
+        first_name=first_name,
+        enrollment_type=EST_MEMBERSHIP,
+        membership=EST_MEMBERSHIP,
+        active=True
+    )
+    db.session.add(emp_member)
+    db.session.flush()
+
+    reservation = Reservation(
+        confirmation_code=code,
+        member_id=emp_member.id,
+        reservation_date=res_date,
+        party_size=party_size
+    )
+    db.session.add(reservation)
+    db.session.commit()
+
+    return render_template('checkin/operator_entry.html', confirmation=reservation)
+
 # ---------------------------------------------------------------------------
 # Admin routes
 # ---------------------------------------------------------------------------

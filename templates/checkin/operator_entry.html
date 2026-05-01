@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Operator Entry{% endblock %}
+{% block content %}
+<h2><i class="bi bi-person-badge"></i> Operator Entry</h2>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    {% for category, message in messages %}
+      <div class="alert alert-{{ category }}">{{ message }}</div>
+    {% endfor %}
+  {% endif %}
+{% endwith %}
+
+{% if confirmation %}
+<div class="card border-success mb-4" style="max-width:500px;">
+  <div class="card-body text-center">
+    <h4 class="text-success"><i class="bi bi-check-circle-fill"></i> Reservation Confirmed</h4>
+    <p class="mb-1">Confirmation Code:</p>
+    <h3><code>{{ confirmation.confirmation_code }}</code></h3>
+    <p class="mb-1"><strong>{{ confirmation.member.first_name }} {{ confirmation.member.last_name }}</strong></p>
+    <p class="mb-1">Date: {{ confirmation.reservation_date.strftime('%A, %B %-d, %Y') }}</p>
+    <p class="mb-0">Party Size: {{ confirmation.party_size }}</p>
+  </div>
+</div>
+{% endif %}
+
+<div class="card" style="max-width:500px;">
+  <div class="card-body">
+    <h5 class="card-title">Create Employee Reservation</h5>
+    <form method="POST" action="{{ url_for('checkin_operator_entry') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <div class="mb-3">
+        <label for="reservation_date" class="form-label">Date</label>
+        <input type="date" name="reservation_date" id="reservation_date" class="form-control" required>
+      </div>
+      <div class="mb-3">
+        <label for="last_name" class="form-label">Last Name</label>
+        <input type="text" name="last_name" id="last_name" class="form-control" required>
+      </div>
+      <div class="mb-3">
+        <label for="first_name" class="form-label">First Name</label>
+        <input type="text" name="first_name" id="first_name" class="form-control" required>
+      </div>
+      <div class="mb-3">
+        <label for="party_size" class="form-label">Number in Party</label>
+        <select name="party_size" id="party_size" class="form-select" required>
+          <option value="1">1</option>
+          <option value="2">2</option>
+          <option value="3">3</option>
+          <option value="4">4</option>
+          <option value="5">5</option>
+          <option value="6">6</option>
+        </select>
+      </div>
+      <button type="submit" class="btn btn-warning w-100"><i class="bi bi-check-lg"></i> Create Reservation</button>
+    </form>
+  </div>
+</div>
+
+<a href="{{ url_for('checkin_dashboard') }}" class="btn btn-secondary mt-3">← Back to Dashboard</a>
+{% endblock %}
+{% block extra_js %}
+<script>
+(function(){
+  var _nav=false;
+  document.addEventListener('click',function(e){var a=e.target.closest('a');if(a&&a.href&&a.href.startsWith(location.origin)&&!a.target&&!e.ctrlKey&&!e.metaKey&&!e.shiftKey)_nav=true;});
+  document.addEventListener('submit',function(){_nav=true;});
+  window.addEventListener('beforeunload',function(){if(!_nav)navigator.sendBeacon('{{ url_for("checkin_beacon_logout") }}');});
+})();
+</script>
+{% endblock %}
