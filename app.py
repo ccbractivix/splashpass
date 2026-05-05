@@ -740,7 +740,9 @@ def member_login():
         return jsonify({'success': False, 'message': 'Please enter both your Owner Number and Last Name.'}), 400
 
     member = Member.query.filter_by(owner_number=owner_number, active=True).first()
-    if not member or member.last_name.strip().lower() != last_name.lower():
+    stored_last = member.last_name.strip().split(',')[0].strip().lower() if member else ''
+    entered_last = last_name.split(',')[0].strip().lower()
+    if not member or stored_last != entered_last:
         return jsonify({'success': False, 'message': 'Account not found. Please check your Owner Number and Last Name and try again.'}), 401
 
     session['member_id'] = member.id
