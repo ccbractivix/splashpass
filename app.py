@@ -112,6 +112,24 @@ def get_capacity_used(d):
         .filter_by(reservation_date=d).scalar()
     return result
 
+_NAME_SUFFIXES = re.compile(
+    r'\b(jr|sr|ii|iii|iv|v|vi|esq|phd|md|dds|ret)\.?(?=\s|$)',
+    re.IGNORECASE
+)
+
+def normalize_last_name(name: str) -> str:
+    """Return a lowercase, suffix-stripped version of a last name for comparison.
+
+    Handles suffixes separated by a comma (e.g. "Smith, Jr.") as well as
+    common suffixes that appear as trailing words without a comma
+    (e.g. "Smith Jr", "Smith III").
+    """
+    # Drop anything after a comma (e.g. "Smith, Jr.")
+    name = name.split(',')[0]
+    # Remove common standalone suffixes
+    name = _NAME_SUFFIXES.sub('', name)
+    return name.strip().lower()
+
 def make_qr_base64(data):
     qr = qrcode.make(data)
     buf = io.BytesIO()
@@ -740,8 +758,8 @@ def member_login():
         return jsonify({'success': False, 'message': 'Please enter both your Owner Number and Last Name.'}), 400
 
     member = Member.query.filter_by(owner_number=owner_number, active=True).first()
-    stored_last = member.last_name.strip().split(',')[0].strip().lower() if member else ''
-    entered_last = last_name.split(',')[0].strip().lower()
+    stored_last = normalize_last_name(member.last_name) if member else ''
+    entered_last = normalize_last_name(last_name)
     if not member or stored_last != entered_last:
         return jsonify({'success': False, 'message': 'Account not found. Please check your Owner Number and Last Name and try again.'}), 401
 
