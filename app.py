@@ -113,7 +113,7 @@ def get_capacity_used(d):
     return result
 
 _NAME_SUFFIXES = re.compile(
-    r'\b(jr|sr|ii|iii|iv|v|vi|esq|phd|md|dds|ret)\.?(?=\s|$)',
+    r'\b(jr|sr|ii|iii|iv|esq|phd|md|dds|ret)\.?(?=\s|$)',
     re.IGNORECASE
 )
 
@@ -124,6 +124,8 @@ def normalize_last_name(name: str) -> str:
     common suffixes that appear as trailing words without a comma
     (e.g. "Smith Jr", "Smith III").
     """
+    if not name:
+        return ''
     # Drop anything after a comma (e.g. "Smith, Jr.")
     name = name.split(',')[0]
     # Remove common standalone suffixes
