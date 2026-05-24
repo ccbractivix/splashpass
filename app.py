@@ -204,17 +204,18 @@ def get_member_available_dates(member):
             })
     return available_dates
 
-def send_problem_report_email(name, owner_number, contact, message):
+def send_problem_report_email(name, owner_number, contact, message, renewed=False):
     sg = sendgrid.SendGridAPIClient(api_key=os.environ.get('SENDGRID_API_KEY'))
     from_email = Email(os.environ.get('MAIL_FROM', 'noreply@ccbrsplashpass.com'))
     to_email = To(os.environ.get('MAIL_RECIPIENT'))
     subject = f"SplashPass Problem Report - Owner #{owner_number}"
+    renewed_line = "Recently renewed/upgraded: Yes\n" if renewed else ""
     body = f"""New Problem Report Submitted
 
 Name: {name}
 Owner Number: {owner_number}
 Contact: {contact}
-
+{renewed_line}
 Message:
 {message}
 """
@@ -823,9 +824,24 @@ def report_form():
 def report_submit():
     name = request.form.get('name', '').strip()
     owner_number = request.form.get('owner_number', '').strip()
-    contact = request.form.get('contact', '').strip()
+    phone = request.form.get('phone', '').strip()
+    email = request.form.get('email', '').strip()
+    # Legacy single-field support
+    contact_legacy = request.form.get('contact', '').strip()
     message = request.form.get('message', '').strip()
+    renewed = bool(request.form.get('renewed'))
     is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+
+    # Build contact string from phone/email (or legacy field)
+    if phone or email:
+        parts = []
+        if phone:
+            parts.append(f"Phone: {phone}")
+        if email:
+            parts.append(f"Email: {email}")
+        contact = ', '.join(parts)
+    else:
+        contact = contact_legacy
 
     if not name or not owner_number or not contact or not message:
         if is_ajax:
@@ -834,7 +850,7 @@ def report_submit():
         return redirect(url_for('report_form'))
 
     try:
-        send_problem_report_email(name, owner_number, contact, message)
+        send_problem_report_email(name, owner_number, contact, message, renewed=renewed)
         if is_ajax:
             session.pop('member_id', None)
             session.pop('pending_reservation', None)
