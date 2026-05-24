@@ -4,10 +4,13 @@
 <div class="row justify-content-center">
     <div class="col-md-6">
         <div class="card shadow">
-            <div class="card-body">
-                <h3 class="card-title text-center mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h3 class="card-title mb-0">
                     <i class="bi bi-exclamation-triangle text-warning"></i> Report a Problem
                 </h3>
+                <button type="button" id="reportPageCloseBtn" class="btn-close" aria-label="Close"></button>
+            </div>
+            <div class="card-body">
                 <p class="text-muted text-center mb-4">
                     Having trouble booking? Member number not working? Let us know and we'll get it sorted out.
                 </p>
@@ -23,7 +26,7 @@
                     {% endif %}
                 {% endwith %}
 
-                <form method="POST" action="{{ url_for('report_submit') }}">
+                <form method="POST" action="{{ url_for('report_submit') }}" id="reportPageForm">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <div class="mb-3">
                         <label for="name" class="form-label">Your Name</label>
@@ -34,14 +37,21 @@
                         <input type="text" class="form-control" id="owner_number" name="owner_number" required>
                     </div>
                     <div class="mb-3">
-                        <label for="contact" class="form-label">Email or Phone Number</label>
-                        <input type="text" class="form-control" id="contact" name="contact" required
-                               placeholder="So we can reach you back">
+                        <label for="phone" class="form-label">Cell Phone Number <span class="text-muted small">(preferred)</span></label>
+                        <input type="tel" class="form-control" id="phone" name="phone" placeholder="Best number to text you">
+                    </div>
+                    <div class="mb-3">
+                        <label for="email" class="form-label">Email Address</label>
+                        <input type="email" class="form-control" id="email" name="email" placeholder="Your email address">
                     </div>
                     <div class="mb-3">
                         <label for="message" class="form-label">Describe the Problem</label>
                         <textarea class="form-control" id="message" name="message" rows="4" required
                                   placeholder="Tell us what happened..."></textarea>
+                    </div>
+                    <div class="mb-3 form-check">
+                        <input type="checkbox" class="form-check-input" id="renewed" name="renewed">
+                        <label class="form-check-label" for="renewed">I have recently renewed or upgraded my membership</label>
                     </div>
                     <div class="d-grid">
                         <button type="submit" class="btn btn-warning btn-lg">
@@ -51,7 +61,7 @@
                 </form>
 
                 <div class="text-center mt-3">
-                    <a href="{{ url_for('index') }}" class="text-decoration-none">
+                    <a href="{{ url_for('index') }}" id="reportPageBackLink" class="text-decoration-none">
                         <i class="bi bi-arrow-left"></i> Back to Home
                     </a>
                 </div>
@@ -59,4 +69,126 @@
         </div>
     </div>
 </div>
+
+<!-- "Wait! Don't go yet!" Modal -->
+<div class="modal fade" id="dontGoModal" tabindex="-1" aria-labelledby="dontGoModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header border-0 pb-0">
+        <h5 class="modal-title fw-bold" id="dontGoModalLabel">Wait! Don't go yet!</h5>
+      </div>
+      <div class="modal-body">
+        <p>If you don't fill out a problem report, I can't help you. If you're planning to call the resort, they'll still reach out to me for details. Most member problems are solved in a matter of minutes. Filling out this form is the fastest way to resolve the issue.</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-primary" id="dontGoStayBtn">Yes, I'll finish the form</button>
+        <button type="button" class="btn btn-outline-secondary" id="dontGoLeaveBtn">Leave anyway</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Phone Preferred Modal -->
+<div class="modal fade" id="phonePreferredModal" tabindex="-1" aria-labelledby="phonePreferredModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="phonePreferredModalLabel"><i class="bi bi-phone text-primary"></i> Add Your Cell Number?</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p>Adding a cell number is the fastest way to get a response — I typically communicate via text messages.</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="phonePreferredContinueBtn">Continue without phone</button>
+        <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Go back &amp; add phone</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- No Contact Modal -->
+<div class="modal fade" id="noContactModal" tabindex="-1" aria-labelledby="noContactModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header border-0 pb-0">
+        <h5 class="modal-title fw-bold text-danger" id="noContactModalLabel"><i class="bi bi-exclamation-circle text-danger"></i> Contact Info Required</h5>
+      </div>
+      <div class="modal-body">
+        <p>If you don't give me a way to reach you, I can't solve your problem — please include a cell number (preferred) or an email address, thanks!</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-primary" data-bs-dismiss="modal">OK, I'll add my contact info</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+(function(){
+  var dontGoModal = new bootstrap.Modal(document.getElementById('dontGoModal'));
+  var phonePreferredModal = new bootstrap.Modal(document.getElementById('phonePreferredModal'));
+  var noContactModal = new bootstrap.Modal(document.getElementById('noContactModal'));
+  var skipPhoneWarning = false;
+  var leaveUrl = null;
+
+  function showDontGo(url){
+    leaveUrl = url || '{{ url_for("index") }}';
+    dontGoModal.show();
+  }
+
+  document.getElementById('reportPageCloseBtn').addEventListener('click', function(){
+    showDontGo('{{ url_for("index") }}');
+  });
+
+  document.getElementById('reportPageBackLink').addEventListener('click', function(e){
+    e.preventDefault();
+    showDontGo(this.href);
+  });
+
+  document.getElementById('dontGoStayBtn').addEventListener('click', function(){
+    dontGoModal.hide();
+    leaveUrl = null;
+  });
+
+  document.getElementById('dontGoLeaveBtn').addEventListener('click', function(){
+    dontGoModal.hide();
+    var url = leaveUrl || '{{ url_for("index") }}';
+    document.getElementById('dontGoModal').addEventListener('hidden.bs.modal', function go(){
+      document.getElementById('dontGoModal').removeEventListener('hidden.bs.modal', go);
+      window.location.href = url;
+    });
+  });
+
+  function doSubmit(){
+    document.getElementById('reportPageForm').submit();
+  }
+
+  document.getElementById('phonePreferredContinueBtn').addEventListener('click', function(){
+    skipPhoneWarning = true;
+    phonePreferredModal.hide();
+    document.getElementById('phonePreferredModal').addEventListener('hidden.bs.modal', function go(){
+      document.getElementById('phonePreferredModal').removeEventListener('hidden.bs.modal', go);
+      doSubmit();
+    });
+  });
+
+  document.getElementById('reportPageForm').addEventListener('submit', function(e){
+    var phone = document.getElementById('phone').value.trim();
+    var email = document.getElementById('email').value.trim();
+
+    if(!phone && !email){
+      e.preventDefault();
+      noContactModal.show();
+      return;
+    }
+    if(!phone && !skipPhoneWarning){
+      e.preventDefault();
+      phonePreferredModal.show();
+      return;
+    }
+  });
+})();
+</script>
 {% endblock %}

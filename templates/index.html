@@ -57,7 +57,7 @@
     <div class="modal-content">
       <div class="modal-header">
         <h5 class="modal-title" id="reportModalLabel"><i class="bi bi-exclamation-triangle text-warning"></i> Report a Problem</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        <button type="button" id="reportModalCloseBtn" class="btn-close" aria-label="Close"></button>
       </div>
       <div class="modal-body">
         <p class="text-muted text-center mb-3">Having trouble logging in? Let us know and we'll get it sorted out.</p>
@@ -73,17 +73,79 @@
             <input type="tel" class="form-control" id="report_owner_number" name="owner_number" required>
           </div>
           <div class="mb-3">
-            <label for="report_contact" class="form-label">Email or Phone Number</label>
-            <input type="text" class="form-control" id="report_contact" name="contact" required placeholder="So we can reach you back">
+            <label for="report_phone" class="form-label">Cell Phone Number <span class="text-muted small">(preferred)</span></label>
+            <input type="tel" class="form-control" id="report_phone" name="phone" placeholder="Best number to text you">
+          </div>
+          <div class="mb-3">
+            <label for="report_email" class="form-label">Email Address</label>
+            <input type="email" class="form-control" id="report_email" name="email" placeholder="Your email address">
           </div>
           <div class="mb-3">
             <label for="report_message" class="form-label">Describe the Problem</label>
             <textarea class="form-control" id="report_message" name="message" rows="4" required placeholder="Tell us what happened..."></textarea>
           </div>
+          <div class="mb-3 form-check">
+            <input type="checkbox" class="form-check-input" id="report_renewed" name="renewed">
+            <label class="form-check-label" for="report_renewed">I have recently renewed or upgraded my membership</label>
+          </div>
           <div class="d-grid">
             <button type="submit" class="btn btn-warning btn-lg"><i class="bi bi-send"></i> Submit Report</button>
           </div>
         </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- "Wait! Don't go yet!" Modal -->
+<div class="modal fade" id="dontGoModal" tabindex="-1" aria-labelledby="dontGoModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header border-0 pb-0">
+        <h5 class="modal-title fw-bold" id="dontGoModalLabel">Wait! Don't go yet!</h5>
+      </div>
+      <div class="modal-body">
+        <p>If you don't fill out a problem report, I can't help you. If you're planning to call the resort, they'll still reach out to me for details. Most member problems are solved in a matter of minutes. Filling out this form is the fastest way to resolve the issue.</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-primary" id="dontGoStayBtn">Yes, I'll finish the form</button>
+        <button type="button" class="btn btn-outline-secondary" id="dontGoLeaveBtn">Leave anyway</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Phone Preferred Modal -->
+<div class="modal fade" id="phonePreferredModal" tabindex="-1" aria-labelledby="phonePreferredModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="phonePreferredModalLabel"><i class="bi bi-phone text-primary"></i> Add Your Cell Number?</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p>Adding a cell number is the fastest way to get a response — I typically communicate via text messages.</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="phonePreferredContinueBtn">Continue without phone</button>
+        <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Go back &amp; add phone</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- No Contact Modal -->
+<div class="modal fade" id="noContactModal" tabindex="-1" aria-labelledby="noContactModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header border-0 pb-0">
+        <h5 class="modal-title fw-bold text-danger" id="noContactModalLabel"><i class="bi bi-exclamation-circle text-danger"></i> Contact Info Required</h5>
+      </div>
+      <div class="modal-body">
+        <p>If you don't give me a way to reach you, I can't solve your problem — please include a cell number (preferred) or an email address, thanks!</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-primary" data-bs-dismiss="modal">OK, I'll add my contact info</button>
       </div>
     </div>
   </div>
@@ -153,10 +215,60 @@
     });
   });
 
-  // --- Report form submission ---
-  document.getElementById('reportForm').addEventListener('submit', function(e){
-    e.preventDefault();
-    var form = this;
+  // --- Report modal X button: show "Don't go" warning ---
+  var reportModalEl = document.getElementById('reportModal');
+  var reportModalInstance = null;
+  var dontGoModalEl = document.getElementById('dontGoModal');
+  var dontGoModal = new bootstrap.Modal(dontGoModalEl);
+
+  document.getElementById('reportModalCloseBtn').addEventListener('click', function(){
+    var nameVal = document.getElementById('report_name').value.trim();
+    var msgVal = document.getElementById('report_message').value.trim();
+    var phoneVal = document.getElementById('report_phone').value.trim();
+    var emailVal = document.getElementById('report_email').value.trim();
+    // Only warn if the user has started filling the form
+    if(nameVal || msgVal || phoneVal || emailVal){
+      dontGoModal.show();
+    } else {
+      var inst = bootstrap.Modal.getInstance(reportModalEl);
+      if(inst) inst.hide();
+    }
+  });
+
+  document.getElementById('dontGoStayBtn').addEventListener('click', function(){
+    dontGoModal.hide();
+    // Re-show the report modal
+    dontGoModalEl.addEventListener('hidden.bs.modal', function reopenReport(){
+      dontGoModalEl.removeEventListener('hidden.bs.modal', reopenReport);
+      var inst = bootstrap.Modal.getOrCreateInstance(reportModalEl);
+      inst.show();
+    });
+  });
+
+  document.getElementById('dontGoLeaveBtn').addEventListener('click', function(){
+    dontGoModal.hide();
+    var inst = bootstrap.Modal.getInstance(reportModalEl);
+    if(inst) inst.hide();
+  });
+
+  // --- Phone / contact validation modals ---
+  var phonePreferredModalEl = document.getElementById('phonePreferredModal');
+  var phonePreferredModal = new bootstrap.Modal(phonePreferredModalEl);
+  var noContactModalEl = document.getElementById('noContactModal');
+  var noContactModal = new bootstrap.Modal(noContactModalEl);
+  var skipPhoneWarning = false;
+
+  document.getElementById('phonePreferredContinueBtn').addEventListener('click', function(){
+    skipPhoneWarning = true;
+    phonePreferredModal.hide();
+    phonePreferredModalEl.addEventListener('hidden.bs.modal', function doSubmit(){
+      phonePreferredModalEl.removeEventListener('hidden.bs.modal', doSubmit);
+      submitReportForm();
+    });
+  });
+
+  function submitReportForm(){
+    var form = document.getElementById('reportForm');
     var alertEl = document.getElementById('reportAlert');
     var formData = new FormData(form);
     fetch('{{ url_for("report_submit") }}', {
@@ -169,6 +281,7 @@
         alertEl.className = 'alert alert-success';
         alertEl.textContent = result.data.message;
         form.reset();
+        skipPhoneWarning = false;
         // Auto logout after confirmation
         setTimeout(function(){
           window.location.href = '{{ url_for("member_logout") }}';
@@ -181,6 +294,24 @@
       alertEl.className = 'alert alert-danger';
       alertEl.textContent = 'An error occurred. Please try again.';
     });
+  }
+
+  // --- Report form submission ---
+  document.getElementById('reportForm').addEventListener('submit', function(e){
+    e.preventDefault();
+    var phone = document.getElementById('report_phone').value.trim();
+    var email = document.getElementById('report_email').value.trim();
+
+    if(!phone && !email){
+      noContactModal.show();
+      return;
+    }
+    if(!phone && !skipPhoneWarning){
+      phonePreferredModal.show();
+      return;
+    }
+    skipPhoneWarning = false;
+    submitReportForm();
   });
 })();
 </script>
