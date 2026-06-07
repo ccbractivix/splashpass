@@ -97,6 +97,23 @@
   </div>
 </div>
 
+<!-- Info Modal (shown before the report form) -->
+<div class="modal fade" id="infoModal" tabindex="-1" aria-labelledby="infoModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header border-0 pb-0">
+        <h5 class="modal-title fw-bold" id="infoModalLabel"><i class="bi bi-info-circle text-primary"></i> Before You Begin</h5>
+      </div>
+      <div class="modal-body">
+        <p>Please complete and submit this form. This is the fastest way to get help. This goes directly to the app administrator and most reports are answered within a few minutes.</p>
+      </div>
+      <div class="modal-footer border-0">
+        <button type="button" class="btn btn-primary" id="infoModalContinueBtn">Got it</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- "Wait! Don't go yet!" Modal -->
 <div class="modal fade" id="dontGoModal" tabindex="-1" aria-labelledby="dontGoModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
   <div class="modal-dialog modal-dialog-centered">
@@ -205,8 +222,7 @@
         if(failedAttempts >= 2){
           var loginModalInstance = bootstrap.Modal.getInstance(document.getElementById('loginModal'));
           if(loginModalInstance) loginModalInstance.hide();
-          var reportModal = new bootstrap.Modal(document.getElementById('reportModal'));
-          reportModal.show();
+          openReportFlow();
         }
       }
     }).catch(function(){
@@ -220,6 +236,22 @@
   var reportModalInstance = null;
   var dontGoModalEl = document.getElementById('dontGoModal');
   var dontGoModal = new bootstrap.Modal(dontGoModalEl);
+
+  // --- Info modal: shown before the report form ---
+  var infoModalEl = document.getElementById('infoModal');
+  var infoModal = new bootstrap.Modal(infoModalEl);
+
+  function openReportFlow(){
+    infoModal.show();
+  }
+
+  document.getElementById('infoModalContinueBtn').addEventListener('click', function(){
+    infoModal.hide();
+    infoModalEl.addEventListener('hidden.bs.modal', function openReport(){
+      var inst = bootstrap.Modal.getOrCreateInstance(reportModalEl);
+      inst.show();
+    }, { once: true });
+  });
 
   document.getElementById('reportModalCloseBtn').addEventListener('click', function(){
     var nameVal = document.getElementById('report_name').value.trim();
