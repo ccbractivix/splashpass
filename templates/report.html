@@ -70,23 +70,6 @@
     </div>
 </div>
 
-<!-- Info Modal (shown on page load) -->
-<div class="modal fade" id="infoModal" tabindex="-1" aria-labelledby="infoModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
-  <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content">
-      <div class="modal-header border-0 pb-0">
-        <h5 class="modal-title fw-bold" id="infoModalLabel"><i class="bi bi-info-circle text-primary"></i> Before You Begin</h5>
-      </div>
-      <div class="modal-body">
-        <p>Please complete and submit this form. This is the fastest way to get help. This goes directly to the app administrator and most reports are answered within a few minutes.</p>
-      </div>
-      <div class="modal-footer border-0">
-        <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Got it</button>
-      </div>
-    </div>
-  </div>
-</div>
-
 <!-- "Wait! Don't go yet!" Modal -->
 <div class="modal fade" id="dontGoModal" tabindex="-1" aria-labelledby="dontGoModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
   <div class="modal-dialog modal-dialog-centered">
@@ -144,9 +127,6 @@
 {% block extra_js %}
 <script>
 (function(){
-  var infoModal = new bootstrap.Modal(document.getElementById('infoModal'));
-  infoModal.show();
-
   var dontGoModal = new bootstrap.Modal(document.getElementById('dontGoModal'));
   var phonePreferredModal = new bootstrap.Modal(document.getElementById('phonePreferredModal'));
   var noContactModal = new bootstrap.Modal(document.getElementById('noContactModal'));
