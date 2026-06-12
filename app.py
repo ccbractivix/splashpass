@@ -66,6 +66,11 @@ class DayType(db.Model):
     day_type = db.Column(db.String(20), nullable=False, default='Weekday')
     capacity_override = db.Column(db.Integer, nullable=True)
 
+class MemberUpload(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    filename = db.Column(db.String(255), nullable=False)
+    uploaded_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(EASTERN))
+
 class Reservation(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     confirmation_code = db.Column(db.String(20), unique=True, nullable=False)
@@ -1340,7 +1345,8 @@ def employee_splash_time():
 @admin_required
 def admin_members():
     members = Member.query.filter_by(active=True).order_by(Member.last_name).all()
-    return render_template('admin/members.html', members=members)
+    last_upload = MemberUpload.query.order_by(MemberUpload.uploaded_at.desc()).first()
+    return render_template('admin/members.html', members=members, last_upload=last_upload)
 
 @app.route('/admin/upload', methods=['POST'])
 @admin_required
@@ -1470,6 +1476,8 @@ def upload_members():
                 db.session.add(m)
             count += 1
 
+        upload_record = MemberUpload(filename=file.filename or 'unknown')
+        db.session.add(upload_record)
         db.session.commit()
 
         new_count = count - updated
