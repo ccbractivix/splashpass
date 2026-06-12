@@ -1339,7 +1339,7 @@ def employee_splash_time():
 @app.route('/admin/members')
 @admin_required
 def admin_members():
-    members = Member.query.order_by(Member.last_name).all()
+    members = Member.query.filter_by(active=True).order_by(Member.last_name).all()
     return render_template('admin/members.html', members=members)
 
 @app.route('/admin/upload', methods=['POST'])
