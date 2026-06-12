@@ -132,6 +132,28 @@ def normalize_last_name(name: str) -> str:
     name = _NAME_SUFFIXES.sub('', name)
     return name.strip().lower()
 
+def normalize_owner_number(value: str) -> str:
+    """Canonicalize an owner number for consistent storage and lookup.
+
+    Trims surrounding whitespace (including non-breaking spaces) and strips a
+    trailing ".0" that spreadsheets leave behind when the owner-number column is
+    exported as a float (e.g. "6201197.0" -> "6201197").  Normalizing on both
+    import and lookup ensures the most recently uploaded CSV is the single source
+    of truth and that formatting differences in earlier files cannot leave behind
+    mismatched or duplicate records that block a member from logging in.
+    """
+    if not value:
+        return ''
+    cleaned = value.replace('\xa0', ' ').strip()
+    # Strip a trailing all-zero fraction left by spreadsheets exporting the
+    # column as a float (e.g. "6201197.0"/"6201197.00" -> "6201197"). Uses plain
+    # string operations to avoid any regular-expression backtracking on input.
+    if '.' in cleaned:
+        int_part, _, frac_part = cleaned.partition('.')
+        if int_part.isdigit() and frac_part and set(frac_part) == {'0'}:
+            cleaned = int_part
+    return cleaned
+
 def make_qr_base64(data):
     qr = qrcode.make(data)
     buf = io.BytesIO()
@@ -548,7 +570,7 @@ def book():
 
 @app.route('/reserve', methods=['POST'])
 def reserve():
-    owner_number = request.form.get('owner_number', '').strip()
+    owner_number = normalize_owner_number(request.form.get('owner_number', ''))
     reservation_date_str = request.form.get('reservation_date', '').strip()
     party_size_str = request.form.get('party_size', '').strip()
 
@@ -754,7 +776,7 @@ def cancel_reservation(res_id):
 
 @app.route('/member/login', methods=['POST'])
 def member_login():
-    owner_number = request.form.get('owner_number', '').strip()
+    owner_number = normalize_owner_number(request.form.get('owner_number', ''))
     last_name = request.form.get('last_name', '').strip()
 
     if not owner_number or not last_name:
@@ -1040,7 +1062,7 @@ def checkin_search():
         return render_template('checkin/result.html',
                                reservations=[reservation], query=query, today=today)
 
-    member = Member.query.filter_by(owner_number=query).first()
+    member = Member.query.filter_by(owner_number=normalize_owner_number(query)).first()
     if member:
         reservations = Reservation.query.filter_by(
             member_id=member.id, reservation_date=today).all()
@@ -1395,7 +1417,7 @@ def upload_members():
         updated = 0
 
         for row in reader:
-            owner_number = (row.get(owner_col) or '').strip()
+            owner_number = normalize_owner_number(row.get(owner_col) or '')
             first_name = (row.get(first_col) or '').strip()
             last_name = (row.get(last_col) or '').strip()
 
