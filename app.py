@@ -37,6 +37,7 @@ DEFAULT_CAPACITY = 128
 EASTERN = pytz.timezone('US/Eastern')
 EST_MEMBERSHIP = 'Employee'
 EST_MAX_ADVANCE_DAYS = 183  # ~6 months
+ACC_MEMBERSHIP = 'ACC'
 
 db = SQLAlchemy(app)
 csrf = CSRFProtect(app)
@@ -103,6 +104,14 @@ def generate_est_code():
     chars = string.ascii_uppercase + string.digits
     while True:
         code = 'EST.' + ''.join(random.choices(chars, k=6))
+        if not Reservation.query.filter_by(confirmation_code=code).first():
+            return code
+
+def generate_acc_code():
+    """Generate an ACC Reservations confirmation code: ACC. + 6 chars."""
+    chars = string.ascii_uppercase + string.digits
+    while True:
+        code = 'ACC.' + ''.join(random.choices(chars, k=6))
         if not Reservation.query.filter_by(confirmation_code=code).first():
             return code
 
@@ -1341,6 +1350,69 @@ def employee_splash_time():
     return render_template('admin/employee_splash_time.html',
                            confirmation=reservation)
 
+# ---- ACC Reservations ----
+
+@app.route('/admin/acc-reservations', methods=['GET', 'POST'])
+@admin_required
+def acc_reservations():
+    if request.method == 'GET':
+        return render_template('admin/acc_reservations.html')
+
+    # --- process POST ---
+    last_name = (request.form.get('last_name') or '').strip()
+    first_name = (request.form.get('first_name') or '').strip()
+    reservation_date_str = request.form.get('reservation_date', '')
+    party_size_str = request.form.get('party_size', '')
+
+    if not last_name or not first_name:
+        flash('Last name and first name are required.', 'danger')
+        return render_template('admin/acc_reservations.html')
+
+    try:
+        res_date = datetime.strptime(reservation_date_str, '%Y-%m-%d').date()
+    except ValueError:
+        flash('Please select a valid date.', 'danger')
+        return render_template('admin/acc_reservations.html')
+
+    try:
+        party_size = int(party_size_str)
+        if party_size < 1 or party_size > 6:
+            raise ValueError
+    except (ValueError, TypeError):
+        flash('Party size must be between 1 and 6.', 'danger')
+        return render_template('admin/acc_reservations.html')
+
+    day_type, capacity = get_day_info(res_date)
+    used = get_capacity_used(res_date)
+    if used + party_size > capacity:
+        flash('Not enough capacity for that date and party size.', 'danger')
+        return render_template('admin/acc_reservations.html')
+
+    code = generate_acc_code()
+
+    acc_member = Member(
+        owner_number=code,
+        last_name=last_name,
+        first_name=first_name,
+        enrollment_type=ACC_MEMBERSHIP,
+        membership=ACC_MEMBERSHIP,
+        active=True
+    )
+    db.session.add(acc_member)
+    db.session.flush()
+
+    reservation = Reservation(
+        confirmation_code=code,
+        member_id=acc_member.id,
+        reservation_date=res_date,
+        party_size=party_size
+    )
+    db.session.add(reservation)
+    db.session.commit()
+
+    return render_template('admin/acc_reservations.html',
+                           confirmation=reservation)
+
 @app.route('/admin/members')
 @admin_required
 def admin_members():
@@ -1414,8 +1486,12 @@ def upload_members():
         # Deactivate all existing members; members present in the CSV
         # will be reactivated (or created) below.  Reservations are
         # intentionally left untouched so upcoming bookings survive.
-        # Employee members (created via Employee Splash Time) are excluded.
-        Member.query.filter(Member.membership != EST_MEMBERSHIP).update({Member.active: False})
+        # Employee members (created via Employee Splash Time) and
+        # ACC members (created via ACC Reservations) are excluded.
+        Member.query.filter(
+            Member.membership != EST_MEMBERSHIP,
+            Member.membership != ACC_MEMBERSHIP
+        ).update({Member.active: False})
 
         count = 0
         skipped = 0
