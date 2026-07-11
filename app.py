@@ -852,6 +852,24 @@ def send_confirmation_email_route():
     else:
         return jsonify({'success': False, 'message': 'Unable to send email. Please save your confirmation code and QR code from this screen.'}), 500
 
+@app.route('/elvis')
+def elvis_report():
+    """Public reservation forecast – next 6 days, no auth required."""
+    today = today_eastern()
+    days = []
+    for i in range(6):
+        d = today + timedelta(days=i)
+        reservations = Reservation.query.filter_by(reservation_date=d).all()
+        days.append({
+            'date': d,
+            'day_name': d.strftime('%A'),
+            'reservations': len(reservations),
+            'guests': sum(r.party_size for r in reservations),
+        })
+    now = now_eastern()
+    return render_template('elvis.html', days=days, generated_at=now)
+
+
 @app.route('/report', methods=['GET'])
 def report_form():
     return render_template('report.html')
