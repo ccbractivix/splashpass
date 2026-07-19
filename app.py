@@ -36,7 +36,6 @@ CHECKIN_PASSWORD = os.environ.get('CHECKIN_PASSWORD', 'checkin')
 DEFAULT_CAPACITY = 128
 EASTERN = pytz.timezone('US/Eastern')
 EST_MEMBERSHIP = 'Employee'
-EST_MAX_ADVANCE_DAYS = 183  # ~6 months
 ACC_MEMBERSHIP = 'ACC'
 
 db = SQLAlchemy(app)
@@ -1148,23 +1147,9 @@ def checkin_operator_entry():
         return render_template('checkin/operator_entry.html')
 
     today = today_eastern()
-    max_date = today + timedelta(days=EST_MAX_ADVANCE_DAYS)
 
     if res_date < today:
         flash('Cannot make a reservation in the past.', 'danger')
-        return render_template('checkin/operator_entry.html')
-    if res_date > max_date:
-        flash('Employee Splash Time reservations can only be made up to 6 months in advance.', 'danger')
-        return render_template('checkin/operator_entry.html')
-
-    day_type, capacity = get_day_info(res_date)
-    if day_type == 'High Use':
-        flash('Employee Splash Time is not available on High Use days.', 'danger')
-        return render_template('checkin/operator_entry.html')
-
-    used = get_capacity_used(res_date)
-    if used + party_size > capacity:
-        flash('Not enough capacity for that date and party size.', 'danger')
         return render_template('checkin/operator_entry.html')
 
     code = generate_est_code()
@@ -1323,23 +1308,9 @@ def employee_splash_time():
         return render_template('admin/employee_splash_time.html')
 
     today = today_eastern()
-    max_date = today + timedelta(days=EST_MAX_ADVANCE_DAYS)
 
     if res_date < today:
         flash('Cannot make a reservation in the past.', 'danger')
-        return render_template('admin/employee_splash_time.html')
-    if res_date > max_date:
-        flash('Employee Splash Time reservations can only be made up to 6 months in advance.', 'danger')
-        return render_template('admin/employee_splash_time.html')
-
-    day_type, capacity = get_day_info(res_date)
-    if day_type == 'High Use':
-        flash('Employee Splash Time is not available on High Use days.', 'danger')
-        return render_template('admin/employee_splash_time.html')
-
-    used = get_capacity_used(res_date)
-    if used + party_size > capacity:
-        flash('Not enough capacity for that date and party size.', 'danger')
         return render_template('admin/employee_splash_time.html')
 
     code = generate_est_code()
